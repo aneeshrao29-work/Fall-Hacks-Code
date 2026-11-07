@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:">
+  <title>JepiTheGenie</title>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="marks"></div>
+  <div id="pointer" aria-hidden="true"><div class="hand"></div></div>
+  <div id="fx"></div>
+  <div id="banner" class="banner"></div>
+
+  <!-- Jepi + caption: this whole thing flies around the screen -->
+  <div class="buddy" id="buddy">
+    <div class="bubble" id="bubble" aria-live="polite"><span class="cc">CC</span><span id="caption"></span><div class="acts" id="acts"></div></div>
+    <div class="jepi" id="jepi" data-mood="idle" role="button" tabindex="0" aria-label="Jepi. Click for menu, double-click to poke, drag to move.">
+      <div class="aura" id="aura" title="aura points">✦<b id="auraVal">0</b></div>
+      <div class="spin3d" id="spin3d">
+        <svg id="sprite" role="img" aria-label="Jepi the pixel robot"></svg>
+        <svg id="spriteBack" aria-hidden="true"></svg>
+        <i class="face3 side-l"></i><i class="face3 side-r"></i><i class="face3 lid"></i>
+      </div>
+      <svg id="pieSvg" aria-hidden="true"></svg>
+    </div>
+    <button class="quick" id="quickBtn" title="find what's wrong with my code">🐞 check code</button>
+  </div>
+
+  <!-- controls stay docked in the corner -->
+  <div class="dock" id="dock">
+    <div class="panel" id="personas" role="radiogroup" aria-label="Persona" hidden>
+      <button class="chip" role="radio" data-persona="bestie">💅<br>bestie</button>
+      <button class="chip" role="radio" data-persona="brainrot">🧠<br>brainrot</button>
+      <button class="chip" role="radio" data-persona="linkedin">💼<br>linkedin</button>
+      <button class="chip" role="radio" data-persona="drama">🎭<br>drama</button>
+      <button class="chip" role="radio" data-persona="cat">🐱<br>cat</button>
+      <button class="chip" role="radio" data-persona="grandma">👵<br>grandma</button>
+    </div>
+    <div class="panel closet" id="closet" hidden>
+      <div class="slot"><span>hat</span><div class="opts" data-slot="hat"></div></div>
+      <div class="slot"><span>face</span><div class="opts" data-slot="face"></div></div>
+      <div class="slot"><span>fit</span><div class="opts" data-slot="fit"></div></div>
+      <div class="slot"><span>trail</span><div class="opts" data-slot="trail"></div></div>
+    </div>
+
+    <div class="tools">
+      <button class="ico act" id="lookBtn" title="look at my screen (⌘⇧Space)" aria-label="Look at my screen">👀</button>
+      <button class="ico act" id="wishBtn" title="make a wish (⌘⇧A)" aria-label="Ask Jepi">💬</button>
+      <div class="seg" role="radiogroup" aria-label="Mode">
+        <button class="ico on" role="radio" aria-checked="true" data-mode="help" title="help: pinpoint what's wrong">🤓</button>
+        <button class="ico" role="radio" aria-checked="false" data-mode="roast" title="roast my screen">🔥</button>
+        <button class="ico" role="radio" aria-checked="false" data-mode="watch" title="watch me (auto every 20s)">🕵️</button>
+      </div>
+      <button class="ico" id="personaBtn" aria-expanded="false" aria-controls="personas" title="persona">💅</button>
+      <button class="ico" id="closetBtn" aria-expanded="false" aria-controls="closet" title="wardrobe">👕</button>
+      <button class="ico" id="sleepBtn" title="sleep mode: no peeking" aria-label="Sleep mode">😴</button>
+      <button class="ico" id="muteBtn" title="sound on/off" aria-label="Toggle sound">🔊</button>
+      <button class="ico" id="quitBtn" title="quit (⌘⇧Q)" aria-label="Quit Jepi">✕</button>
+    </div>
+  </div>
+
+  <!-- the wish bubble: a clean little prompt that pops out of Jepi -->
+  <form id="askForm" class="wish">
+    <label for="question" class="sr-only">Ask Jepi about your screen</label>
+    <input id="question" placeholder="make a wish… ✨" autocomplete="off" maxlength="500">
+    <button class="btn go" type="submit" title="send (Enter)" aria-label="Send wish">➜</button>
+  </form>
+
+  <script src="data.js"></script>
+  <script src="sprite.js"></script>
+  <script src="app.js"></script>
+  <script src="extras.js"></script>
+</body>
+</html>

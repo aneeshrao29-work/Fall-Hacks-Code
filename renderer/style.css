@@ -1,0 +1,310 @@
+:root {
+  --ink: #161616; --cream: #fdf9ef; --teal: #2f9e7e; --sky: #8fd0dc; --mint: #6fe0c8;
+  --pink: #f0717f; --red: #e8384f; --navy: #1a1a9a; --gold: #f7c948; --drop: rgba(22, 22, 22, .35);
+  /* notched 8-bit border + chunky drop shadow */
+  --px: 0 0 0 3px var(--ink), 0 6px 0 3px var(--drop); /* rounded outline + soft drop (follows border-radius) */
+  --r: 14px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100vh; overflow: hidden; background: transparent; }
+body { color: var(--ink); font: 15px/1.35 "Pixelify Sans", monospace; user-select: none; -webkit-font-smoothing: none; }
+svg { shape-rendering: crispEdges; }
+button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
+
+/* ---------- Jepi (flies around) ---------- */
+.buddy { position: fixed; left: 0; top: 0; width: 66px; height: 71px; z-index: 6; transition: opacity .2s; }
+.buddy.hide { opacity: 0; pointer-events: none; }
+.dock.open { display: flex; animation: pop .18s cubic-bezier(.2, .9, .3, 1.15); }
+.jepi { position: absolute; left: 0; top: 0; width: 88px; height: 94px; transform: scale(.75); transform-origin: 0 0; cursor: grab; touch-action: none; }
+.jepi:active { cursor: grabbing; }
+.jepi:hover { filter: drop-shadow(0 0 4px var(--mint)) drop-shadow(0 0 2px var(--mint)); } /* "i'm clickable" */
+/* 📸 badge while Jepi is peeking at the screen */
+.jepi.peeking::after { content: "📸"; position: absolute; left: -14px; top: -6px; z-index: 4; font-size: 20px; animation: bump .5s steps(2) infinite; }
+/* switching desktops/monitors: one quick 2.5D spin, nothing else */
+.jepi.qspin .spin3d { animation: qspin .55s steps(10) both; }
+@keyframes qspin { from { transform: rotateX(-10deg) rotateY(0deg); } to { transform: rotateX(-10deg) rotateY(360deg); } }
+#sprite, #spriteBack, #pieSvg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* ---------- 2.5D body: front + back + side panels + lid, spun around the head's center ---------- */
+.jepi { perspective: 320px; perspective-origin: 48px 40%; }
+.spin3d { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 48px 45px; }
+#sprite { transform: translateZ(12px); backface-visibility: hidden; }
+#spriteBack { transform: rotateY(180deg) translateZ(12px); backface-visibility: hidden; }
+.face3 { position: absolute; display: block; box-shadow: inset 0 0 0 2px var(--ink); }
+/* Jepi is a Raspberry Pi: left side = the stacked ports (same colors/heights as the front tabs) */
+.side-l { left: 8px; top: 22px; width: 24px; height: 46px; transform: rotateY(-90deg);
+  background:
+    linear-gradient(90deg, transparent 0 4px, rgba(0, 0, 0, .18) 4px 6px, transparent 6px) 0 0 / 100% 100%,
+    linear-gradient(#457f6f 0 6px, #06038d 6px 18px, #161616 18px 20px, #ee8888 20px 32px, #161616 32px 34px,
+      #e85a57 34px 38px, #457f6f 38px 46px); }
+/* right side = light-blue edge with an SD-card slot */
+.side-r { left: 64px; top: 22px; width: 24px; height: 46px; transform: rotateY(90deg);
+  background: linear-gradient(#161616, #161616) 50% 62% / 12px 4px no-repeat, linear-gradient(#8ec3cc 0 50%, #7db3bd 50%); }
+/* lid = board top: green + blue strip, gold GPIO header along the edge */
+.lid { left: 20px; top: 10px; width: 56px; height: 24px; transform: rotateX(90deg);
+  background:
+    repeating-linear-gradient(90deg, #f7c948 0 2px, #161616 2px 4px) 6px 4px / 32px 2px no-repeat,
+    repeating-linear-gradient(90deg, #f7c948 0 2px, #161616 2px 4px) 6px 8px / 32px 2px no-repeat,
+    linear-gradient(90deg, #6dbaa5 0 72%, #b8e2ea 72%); }
+.spin3d { animation: sway3d 4s steps(8) infinite alternate; }
+[data-mood="thinking"] .spin3d { animation: revolve3d 1.4s steps(14) infinite; }
+.jepi.flying .spin3d, .jepi.summon .spin3d { animation: none; }
+#pieSvg { z-index: 2; transform-origin: 50% 85%; }
+.jepi:not(.summon) #pieSvg { display: none; }
+
+.bubble {
+  position: absolute; right: 4px; bottom: calc(100% + 14px); width: 220px; padding: 8px 10px;
+  background: #fff; box-shadow: var(--px); user-select: text; z-index: 3; font-size: 14px;
+}
+.bubble #caption { display: block; max-height: 34vh; overflow: auto; font: 500 14px/1.4 ui-rounded, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: auto; }
+.bubble { cursor: pointer; }
+.acts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.acts:empty { display: none; }
+.acts button { padding: 3px 7px; font-size: 12px; font-weight: 700; background: var(--gold); box-shadow: inset 0 0 0 2px var(--ink), 0 3px var(--drop); }
+.acts button:first-child { background: var(--mint); }
+.acts button:active { transform: translateY(2px); box-shadow: inset 0 0 0 2px var(--ink); }
+/* stair-stepped pixel tail pointing down at Jepi */
+.bubble::before, .bubble::after { content: ""; position: absolute; right: 18px; }
+.bubble::before { bottom: -15px; width: 15px; height: 12px; background: var(--ink);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 80% 100%, 80% 75%, 60% 75%, 60% 50%, 40% 50%, 40% 25%, 0 25%); }
+.bubble::after { bottom: -9px; right: 21px; width: 9px; height: 9px; background: #fff;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 67% 100%, 67% 67%, 33% 67%, 33% 33%, 0 33%); }
+.bubble.left { right: auto; left: 4px; }
+.bubble.left::before, .bubble.left::after { right: auto; left: 18px; transform: scaleX(-1); }
+.bubble.left::after { left: 21px; }
+.bubble.below { bottom: auto; top: calc(100% + 14px); }
+.bubble.below::before { bottom: auto; top: -15px; transform: scaleY(-1); }
+.bubble.below::after { bottom: auto; top: -9px; transform: scaleY(-1); }
+.bubble.below.left::before, .bubble.below.left::after { transform: scale(-1, -1); }
+.bubble:has(#caption:empty) { display: none; }
+.bubble.err, .bubble.err::after { background: #ffe3e6; }
+.bubble.thinking #caption { color: #777; }
+.cc { font-family: system-ui, sans-serif; display: inline-block; margin-right: 5px; padding: 0 4px; font-size: 11px; font-weight: 700; color: #fff; background: var(--ink); }
+.aura {
+  position: absolute; top: 2px; right: -14px; z-index: 3; padding: 0 5px; font-size: 12px; font-weight: 700;
+  background: #fff; box-shadow: 0 -2px var(--ink), 0 2px var(--ink), -2px 0 var(--ink), 2px 0 var(--ink);
+}
+.aura.pos b { color: var(--teal); } .aura.neg b { color: var(--red); }
+.aura.bump { animation: bump .4s steps(4); }
+
+/* ---------- dock ---------- */
+.dock {
+  position: fixed; left: 0; top: 0; width: 284px; z-index: 7; display: none; flex-direction: column; gap: 8px;
+  padding: 8px; background: #fff; box-shadow: var(--px); transition: opacity .2s;
+}
+.wish {
+  position: fixed; left: 0; top: 0; z-index: 8; width: 250px; display: none; gap: 6px; padding: 6px;
+  background: #fff; box-shadow: var(--px);
+}
+.wish.open { display: flex; animation: pop .18s cubic-bezier(.2, .9, .3, 1.15); }
+.wish input {
+  flex: 1; min-width: 0; height: 34px; padding: 0 8px; font: inherit; color: var(--ink); background: var(--cream);
+  border: 0; outline: 0; box-shadow: inset 0 0 0 3px var(--ink);
+}
+.wish input:focus { background: #fff; box-shadow: inset 0 0 0 3px var(--teal); }
+.btn.go { width: 38px; height: 34px; font-size: 18px; font-weight: 700; background: var(--gold); box-shadow: inset 0 0 0 3px var(--ink), 0 4px var(--drop); }
+.btn.go:active { transform: translateY(3px); box-shadow: inset 0 0 0 3px var(--ink); }
+.btn.go:disabled { opacity: .5; cursor: wait; }
+.tools { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.seg { display: flex; margin-right: auto; box-shadow: inset 0 0 0 3px var(--ink); padding: 3px; }
+.ico { width: 32px; height: 32px; font-size: 16px; background: #fff; }
+.tools > .ico { box-shadow: inset 0 0 0 3px var(--ink); }
+.ico.on { background: var(--ink); }
+.ico:hover { background: var(--gold); }
+.ico.on:hover { background: var(--ink); }
+.ico.act { background: var(--gold); box-shadow: inset 0 0 0 3px var(--ink); }
+.ico:disabled { opacity: .5; cursor: wait; }
+.panel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.panel[hidden] { display: none; }
+.chip { padding: 4px 2px; font-size: 12px; line-height: 1.2; background: var(--cream); box-shadow: inset 0 0 0 2px var(--ink); }
+.chip:hover { background: #fff3c4; }
+.chip[aria-checked="true"] { background: var(--gold); box-shadow: inset 0 0 0 3px var(--ink); }
+.closet { grid-template-columns: 1fr; gap: 6px; }
+.slot span { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: .6; }
+.opts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.opts .chip { height: 32px; padding: 0; font-size: 17px; }
+
+/* ---------- pinpoints + fx ---------- */
+#marks { transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+#marks, #fx { position: fixed; inset: 0; pointer-events: none; }
+#fx { z-index: 5; }
+.mark {
+  position: absolute; border: 3px solid var(--red); outline: 3px solid var(--ink);
+  animation: pinIn .28s cubic-bezier(.2, .8, .2, 1) both, flash .7s steps(1) .3s 3; transition: opacity .2s ease, transform .2s ease;
+}
+.mark::before, .mark::after { content: ""; position: absolute; width: 9px; height: 9px; background: var(--gold); outline: 3px solid var(--ink); }
+.mark::before { left: -9px; top: -9px; } .mark::after { right: -9px; bottom: -9px; }
+.mark .tag {
+  position: absolute; left: -6px; bottom: calc(100% + 12px); white-space: nowrap; padding: 2px 8px; font-weight: 700;
+  color: #fff; background: var(--red); box-shadow: var(--px);
+}
+.mark.below .tag { bottom: auto; top: calc(100% + 12px); }
+.mark .num { position: absolute; top: -14px; right: -26px; padding: 0 5px; font-weight: 700; background: var(--gold); box-shadow: var(--px); }
+/* the pixel pointing glove: slides out of Jepi and taps the problem */
+#pointer { position: fixed; left: 0; top: 0; z-index: 7; pointer-events: none; display: none; width: 36px; height: 48px;
+  transition: left .5s cubic-bezier(.2, .8, .2, 1), top .5s cubic-bezier(.2, .8, .2, 1), transform .22s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
+  /* red pixel halo so the white glove pops on light AND dark screens */
+  filter: drop-shadow(2px 0 0 var(--red)) drop-shadow(-2px 0 0 var(--red)) drop-shadow(0 2px 0 var(--red)) drop-shadow(0 -2px 0 var(--red)) drop-shadow(3px 3px 0 rgba(22, 22, 22, .5)); }
+#pointer.on { display: block; }
+#pointer .hand { width: 100%; height: 100%; }
+#pointer.down .hand { transform: rotate(180deg); }
+#pointer.tap svg { animation: tap .5s steps(1) infinite; }
+@keyframes tap { 50% { transform: translateY(-5px); } }
+.particle { position: fixed; z-index: 5; pointer-events: none; animation: drift 0.9s steps(6) forwards; }
+.particle.txt { font-weight: 700; font-size: 18px; -webkit-text-stroke: 1px var(--ink); }
+.particle.crumb { width: 6px; height: 6px; background: #f2b25c; animation: crumb .7s steps(5) forwards; }
+
+.banner {
+  position: fixed; top: 40px; left: 50%; z-index: 10; padding: 8px 20px; white-space: nowrap; font-size: 26px; font-weight: 700;
+  background: var(--gold); box-shadow: var(--px); transform: translate(-50%, -400%); transition: transform .4s cubic-bezier(.2, 1.3, .4, 1);
+}
+.banner.show { transform: translate(-50%, 0); }
+.float67 { position: fixed; z-index: 9; font-weight: 700; font-size: 42px; pointer-events: none; -webkit-text-stroke: 2px var(--ink); animation: rise67 2s steps(12) forwards; }
+
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+
+/* ---------- 8-bit animation rig (steps() = choppy retro frames) ---------- */
+#body { animation: bob 1s steps(1) infinite; }
+#eyes { animation: blink 4s steps(1) infinite; }
+#lids { opacity: 0; animation: lids 4s steps(1) infinite; }
+#armL { transform-origin: 12px 30px; animation: swayL 1.2s steps(1) infinite; }
+#armR { transform-origin: 32px 30px; animation: swayR 1.2s steps(1) infinite; }
+#head, .leg, .pupil, .spark, #eyes, .prop, .halo { transform-box: fill-box; }
+#head { transform-origin: 50% 100%; }
+#eyes { transform-origin: center; }
+.leg { transform-origin: 50% 0; animation: dangle .8s steps(1) infinite; }
+.leg:nth-child(even) { animation-direction: reverse; }
+.spark { transform-origin: center; animation: twinkle 1.2s steps(1) infinite; }
+.spark:nth-child(2) { animation-delay: .4s; } .spark:nth-child(3) { animation-delay: .8s; }
+.prop { transform-origin: center; animation: spin .2s steps(1) infinite; }
+.halo { animation: bob 1.4s steps(1) infinite; }
+.mouth, #tear, .wear { display: none; }
+.m-line { display: inline; }
+[data-mood="sassy"] .m-line, [data-mood="judging"] .m-line, [data-mood="hype"] .m-line, [data-mood="sixseven"] .m-line,
+[data-mood="shook"] .m-line, [data-mood="sad"] .m-line { display: none; }
+
+
+[data-mood="sassy"] #head { transform: rotate(-6deg); }
+[data-mood="sassy"] #armR { animation: none; transform: rotate(70deg); }
+[data-mood="sassy"] .m-smirk, [data-mood="judging"] .m-smirk { display: inline; }
+[data-mood="sassy"] #browL { transform: translateY(-1px); }
+[data-mood="hype"] #body, [data-mood="sixseven"] #body { animation: hop .3s steps(1) infinite; }
+[data-mood="hype"] #armL { animation: waveL .2s steps(1) infinite; }
+[data-mood="hype"] #armR { animation: waveR .2s steps(1) infinite; }
+[data-mood="hype"] .m-open, [data-mood="sixseven"] .m-open { display: inline; }
+[data-mood="shook"] #body { animation: shake .1s steps(1) infinite; }
+[data-mood="shook"] #eyes { animation: none; transform: scale(1.2); }
+[data-mood="shook"] .m-o { display: inline; }
+[data-mood="shook"] #armL { animation: none; transform: rotate(60deg); }
+[data-mood="shook"] #armR { animation: none; transform: rotate(-60deg); }
+[data-mood="judging"] #eyes { animation: none; transform: scaleY(.5); }
+[data-mood="judging"] #browL { transform: translateY(1px); }
+[data-mood="sad"] #body { animation: none; transform: translateY(2px); }
+[data-mood="sad"] #armL { animation: none; transform: rotate(-30deg); }
+[data-mood="sad"] #armR { animation: none; transform: rotate(30deg); }
+[data-mood="sad"] .m-frown, [data-mood="sad"] #tear { display: inline; }
+[data-mood="sad"] #tear { animation: drip 1s steps(4) infinite; }
+[data-mood="thinking"] .pupil { animation: look 1s steps(1) infinite; }
+[data-mood="thinking"] #armR { animation: none; transform: rotate(-80deg); }
+[data-mood="sleep"] #eyes { animation: none; opacity: 0; }
+[data-mood="sleep"] #lids { animation: none; opacity: 1; }
+[data-mood="sleep"] #body { animation: bob 2.4s steps(1) infinite; }
+[data-mood="sleep"] .spin3d { animation: none; transform: rotateZ(-6deg); }
+.particle.zzz { font-size: 16px; color: var(--sky); animation: zzz 1.6s steps(8) forwards; }
+@keyframes zzz { to { transform: translate(14px, -40px) scale(1.4); opacity: 0; } }
+[data-mood="sixseven"] #armL { animation: six .3s steps(1) infinite; }
+[data-mood="sixseven"] #armR { animation: seven .3s steps(1) infinite; }
+
+.jepi.talking .mouth { display: none !important; }
+.jepi.talking .m-open { display: inline !important; animation: talk .2s steps(1) infinite; }
+.jepi.flying #body { animation: none; transform: rotate(8deg); }
+.jepi.flying.flyL #body { transform: rotate(-8deg); } /* lean into the direction of travel */
+.jepi.flying .leg { animation: none; transform: rotate(30deg); }
+.jepi.pointL #armL { animation: pointL .4s steps(1) infinite; }
+.jepi.pointR #armR { animation: pointR .4s steps(1) infinite; }
+.jepi.swap .spin3d { animation: swap .4s steps(4); }
+
+/* summon: pie pops in → Jepi climbs out → dusts off crumbs → yeets the pie */
+.p-pop #pieSvg { animation: piePop .45s steps(5) both; }
+.p-pop #body, .p-pop #sparkles { visibility: hidden; }
+.p-rise #body { animation: climb .6s steps(6) both; }
+.p-dust #body { animation: shake .12s steps(1) infinite; }
+.p-dust #armL { animation: waveL .12s steps(1) infinite; }
+.p-yeet #pieSvg { animation: yeet .8s steps(8) forwards; }
+
+@keyframes revolve3d { from { transform: rotateX(-14deg) rotateY(0deg); } to { transform: rotateX(-14deg) rotateY(360deg); } }
+@keyframes sway3d { from { transform: rotateX(-8deg) rotateY(-22deg); } to { transform: rotateX(-8deg) rotateY(22deg); } }
+@keyframes pop { from { transform: scale(.94) translateY(4px); opacity: 0; } }
+@keyframes bob { 50% { transform: translateY(-1px); } }
+@keyframes hop { 50% { transform: translateY(-4px); } }
+@keyframes blink { 0% { opacity: 1; } 94% { opacity: 0; } 97% { opacity: 1; } }
+@keyframes lids { 0% { opacity: 0; } 94% { opacity: 1; } 97% { opacity: 0; } }
+@keyframes swayL { 50% { transform: rotate(8deg); } }
+@keyframes swayR { 50% { transform: rotate(-8deg); } }
+@keyframes dangle { 50% { transform: rotate(10deg); } }
+@keyframes twinkle { 50% { opacity: 0; } }
+@keyframes spin { 50% { transform: scaleX(-1); } }
+@keyframes waveL { 0% { transform: rotate(30deg); } 50% { transform: rotate(70deg); } }
+@keyframes waveR { 0% { transform: rotate(-30deg); } 50% { transform: rotate(-70deg); } }
+@keyframes six { 0% { transform: rotate(50deg); } 50% { transform: rotate(-10deg); } }
+@keyframes seven { 0% { transform: rotate(10deg); } 50% { transform: rotate(-50deg); } }
+@keyframes pointL { 0% { transform: rotate(-20deg); } 50% { transform: rotate(-12deg); } }
+@keyframes pointR { 0% { transform: rotate(20deg); } 50% { transform: rotate(12deg); } }
+@keyframes shake { 0% { transform: translateX(-1px); } 50% { transform: translateX(1px); } }
+@keyframes drip { to { transform: translateY(6px); opacity: 0; } }
+@keyframes look { 0% { transform: translate(-1px, 0); } 50% { transform: translate(1px, 0); } }
+@keyframes talk { 50% { transform: translateY(-1px); } }
+@keyframes swap { from { transform: scale(.6); } }
+@keyframes bump { 50% { transform: scale(1.3); } }
+@keyframes piePop { from { transform: scale(0); } 70% { transform: scale(1.2); } to { transform: scale(1); } }
+@keyframes climb { from { transform: translateY(26px); } 70% { transform: translateY(-5px); } to { transform: none; } }
+@keyframes yeet { to { transform: translate(160px, -40px) rotate(720deg) scale(.4); opacity: 0; } }
+@keyframes drift { to { transform: translateY(18px) scale(.4); opacity: 0; } }
+@keyframes crumb { to { transform: translate(var(--dx, 0), 40px); opacity: 0; } }
+@keyframes rise67 { to { transform: translateY(-260px) rotate(var(--r, 10deg)); opacity: 0; } }
+@keyframes pinIn { from { transform: scale(1.12); opacity: 0; } }
+@keyframes flash { 50% { border-color: var(--gold); } }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }
+
+/* ---------- soft corners: easier on the eyes (Jepi himself stays pixel) ---------- */
+.bubble, .dock, .wish { border-radius: var(--r); }
+.bubble #caption { border-radius: 8px; }
+.aura, .cc { border-radius: 999px; }
+.banner, .mark .tag, .mark .num { border-radius: 12px; }
+.chip, .ico, .btn.go, .wish input, .acts button { border-radius: 10px; }
+.seg { border-radius: 12px; }
+.seg .ico { border-radius: 8px; }
+.mark { border-radius: 12px; outline-offset: 0; }
+.mark::before, .mark::after { border-radius: 50%; }
+.particle.crumb { border-radius: 2px; }
+
+/* ---------- pro motion: UI glides + fades (only Jepi's sprite stays choppy-pixel) ---------- */
+.bubble { transform-origin: 85% 100%; animation: bubbleIn .2s cubic-bezier(.2, .9, .3, 1.15); transition: opacity .18s ease, transform .18s ease; }
+.bubble.left { transform-origin: 15% 100%; }
+.bubble.below { transform-origin: 85% 0; }
+.bubble.hushing, .mark.out, #pointer.out { opacity: 0; }
+.bubble.hushing, .mark.out { transform: scale(.96); }
+@keyframes bubbleIn { from { opacity: 0; transform: scale(.92) translateY(6px); } }
+.chip, .ico, .btn.go, .acts button { transition: background .12s ease, transform .12s ease, box-shadow .12s ease; }
+.chip:hover, .ico:hover, .acts button:hover { transform: translateY(-1px); }
+
+/* wish box: same clean readable font as the answers */
+.wish input { font: 500 14px/1.3 ui-rounded, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: auto; }
+.wish input::placeholder { color: #8a8a8a; }
+
+/* answer text keeps line breaks (for the ⚡ tip line) */
+.bubble #caption { white-space: pre-wrap; }
+/* apply-fix preview: red = current line, green = fixed line */
+.acts pre.diff { flex-basis: 100%; margin: 0 0 2px; padding: 6px 8px; overflow-x: auto; white-space: pre; border-radius: 8px;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #1e1e2a; color: #e6e6e6; }
+.acts pre.diff .del { color: #ff8b8b; }
+.acts pre.diff .add { color: #7ef0b0; }
+
+/* one-click code check, tucked under Jepi; hides while Jepi is busy or pointing at something */
+.quick { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
+  padding: 3px 9px; font: 700 12px/1.2 "Pixelify Sans", monospace; color: var(--ink); background: var(--mint); border-radius: 999px;
+  box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px var(--drop); transition: opacity .18s ease, transform .18s ease; }
+.quick:hover { transform: translateX(-50%) translateY(-1px); background: #9ff9e0; }
+.quick:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 0 0 2px var(--ink); }
+.buddy.away .quick { opacity: 0; pointer-events: none; transform: translateX(-50%) scale(.9); }
