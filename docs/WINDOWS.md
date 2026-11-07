@@ -61,10 +61,10 @@ A pie pops up in the bottom-right corner, Jepi climbs out, and says hi. 🥧
 | Do this | What happens |
 |---|---|
 | **Ctrl + Shift + Space** | Jepi looks at your screen, flies to what's wrong, pins it |
-| **🐞 check code** (button under Jepi) | Code review: finds the main bug + a tip to make it simpler/faster |
+| **Double-tap Jepi** | Check all the code on screen: the bug + the fix, or "perfect code ✨ — want me to explain it?" |
+| **Triple-tap Jepi** | Poke (one more and Jepi goes to sleep 😴) |
 | **Ctrl + Shift + A** | "Make a wish…" — ask Jepi anything about your screen |
-| **Click Jepi** | Menu: modes (help / roast / watch), personas, wardrobe, sleep, sound |
-| **Double-click Jepi** | Poke it 😤 |
+| **Tap Jepi once** | A plain-English menu: Find what's wrong · Ask a question · Ask about one area (drag a box) · Check my code · Syllabus → calendar · Personality (incl. 🎓 Study) · Outfit · Pause · Sound |
 | **Drag Jepi** | Move it anywhere (it stays there) |
 | **Ctrl + Shift + H** | Hide / show Jepi |
 | **Ctrl + Shift + X** or **Esc** | Clear the pins, Jepi flies home |
@@ -72,7 +72,15 @@ A pie pops up in the bottom-right corner, Jepi climbs out, and says hi. 🥧
 | **Ctrl + Shift + Q** | Quit |
 
 **In an answer bubble:** 🛠 **apply fix** (shows the change, asks ✅/✖, then edits your file — with ↩ undo),
-📋 **copy fix**, 🧒 **eli5**, ↩ **ask more**. Click the bubble to dismiss it.
+📋 **copy fix**, 🧒 **explain simply**, ↩ **ask more**, ✓ **got it**. Answers stay until you click ✓ got it (or the bubble, or Esc).
+
+**Errors:** copy a crash / stack trace → tap Jepi → 🚨 *Solve the error I copied* → paste (Ctrl+V) → Enter.
+
+**Walk-throughs:** ask *"explain this line by line"* and Jepi tours each line with ◀ back / next ▶.
+
+**📚 Syllabus:** click Jepi → 📚 → 📂 add PDFs (your course outlines). Jepi finds every deadline and saves
+`jepi-deadlines.ics` to your Downloads — double-click it to add everything to Outlook / Google / Calendar.
+📅 *due this week* lists what's coming up.
 
 The first time you apply a fix, Jepi may ask you to pick the file — it remembers your project folder after that.
 

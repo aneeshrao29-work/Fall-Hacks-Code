@@ -7,6 +7,10 @@ const api = window.jepiAPI || {
   copy() {},
   unpin() {},
   applyFix: async () => ({ error: 'not running in electron' }),
+  explainSimple: async () => ({ error: 'not running in electron' }),
+  syllabus: async () => ({ error: 'not running in electron' }),
+  dueSoon: async () => [],
+  showICS() {},
   undoFix: async () => ({ error: 'not running in electron' }),
   onHotkey() {},
   onCursor() {},
@@ -23,18 +27,21 @@ const LITE = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemor
   || matchMedia('(prefers-reduced-motion: reduce)').matches;
 document.body.classList.toggle('lite', LITE);
 const W = 66, H = 71; // Jepi is drawn at 88x94 and scaled to 75%
-let hushTimer = null, mode = 'help', busy = false, aura = 0, watchTimer = null, moodTimer = null, typeTimer = null, dismissTimer = null;
-let flightId = 0, pos = { x: 0, y: 0 }, home = null, parked = false, hovering = 0, hidden = false;
-let trackOff = { x: 0, y: 0 }, tipsOff = false, lastReply = '', followUp = false, pointerTimer = null, clickTimer = null, asleep = false, dozing = false, lastActive = Date.now();
+let fullText = '', hushTimer = null, busy = false, aura = 0, moodTimer = null, typeTimer = null;
+let flightId = 0, pos = { x: 0, y: 0 }, home = null, parked = false, hidden = false;
+let mouse = { x: -1, y: -1 }, catching = null, picking = false, pasteMode = false;
+let pickRegion = null, trackOff = { x: 0, y: 0 }, tipsOff = false, lastReply = '', followUp = false, pointerTimer = null, clickTimer = null, asleep = false, dozing = false, lastActive = Date.now();
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const serious = () => !!PERSONAS[persona]?.serious; // study mode: no jokes, sounds or aura banners
 let persona = PERSONAS[load('jepi-persona')] ? load('jepi-persona') : 'bestie';
 let outfit = { ...PERSONAS[persona].outfit, ...load('jepi-outfit', {}) };
 muted = load('jepi-muted', false);
+aura = Number(load('jepi-aura', 0)) || 0;
 
 buildTwin(sprite);
 buildBack($('#spriteBack'));
@@ -50,7 +57,7 @@ function setMood(m, ms = 0) {
   if (ms) moodTimer = setTimeout(() => (jepi.dataset.mood = 'idle'), ms);
 }
 function say(text, cls = '', ttl = 9000, actions = [], diff = null) {
-  text = keys(text);
+  text = fullText = keys(text);
   bubble.className = 'bubble ' + cls;
   const acts = $('#acts');
   acts.replaceChildren(...actions.map(([label, fn]) => {
@@ -76,6 +83,7 @@ function say(text, cls = '', ttl = 9000, actions = [], diff = null) {
   let i = 0;
   typeTimer = setInterval(() => {
     caption.textContent += chars[i++] ?? '';
+    if (i % 2 === 0 && cls !== 'thinking') blip(chars[i - 1] || '');
     if (i % 8 === 0 || i >= chars.length) fixBubble(); // layout reads are costly: not every char
     if (i >= chars.length) {
       clearInterval(typeTimer);
@@ -91,39 +99,53 @@ function hush() { // fade the bubble, then empty it (a new say() in the meantime
   bubble.classList.add('hushing');
   setTimeout(() => { if (bubble.classList.contains('hushing')) { caption.textContent = ''; $('#acts').replaceChildren(); bubble.classList.remove('hushing'); } }, 180);
 }
-bubble.onclick = () => { hush(); if (parked) goHome(); }; // click the bubble = dismiss
-function banner(text) {
-  const b = $('#banner');
-  b.textContent = text;
-  b.classList.add('show');
-  clearTimeout(b._t);
-  b._t = setTimeout(() => b.classList.remove('show'), 2200);
-}
-function addAura(n) {
-  aura += n;
-  const el = $('#aura');
-  $('#auraVal').textContent = (aura > 0 ? '+' : '') + aura;
-  el.classList.toggle('pos', aura > 0);
-  el.classList.toggle('neg', aura < 0);
-  el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
-  if (aura >= 67) banner(`AURA FARMING 🔥 +${aura}`);
-  else if (aura <= -67) banner(`YOU'RE COOKED 💀 ${aura}`);
-  else if (Math.abs(n) >= 30) banner(`${n > 0 ? '+' : ''}${n} aura ${n > 0 ? '✨' : '📉'}`);
-}
+bubble.onclick = (e) => {
+  if (e.target.closest('button') || getSelection()?.toString().trim()) return; // buttons, or they're selecting text to copy
+  if (caption.textContent.length < fullText.length) { // 1st click: finish typing instantly
+    clearInterval(typeTimer); caption.textContent = fullText; jepi.classList.remove('talking'); fixBubble(); return;
+  }
+  done(); // 2nd click: dismiss
+};
 
 // ---------- movement + trail ----------
+// every pinned frame + its title/number, in screen px (layout boxes, so the pop-in animation can't fool it)
+function obstacles() {
+  const out = [];
+  for (const m of document.querySelectorAll('#marks .mark:not(.out)')) {
+    const x = m.offsetLeft + trackOff.x, y = m.offsetTop + trackOff.y;
+    out.push({ x, y, w: m.offsetWidth, h: m.offsetHeight });
+    for (const c of m.children) out.push({ x: x + c.offsetLeft, y: y + c.offsetTop, w: c.offsetWidth, h: c.offsetHeight });
+  }
+  return out;
+}
+// how much of box a covers the obstacles (each grown by pad so Jepi keeps some air), in px²
+const overlap = (a, list, pad = 12) => list.reduce((s, b) =>
+  s + Math.max(0, Math.min(a.x + a.w, b.x + b.w + pad) - Math.max(a.x, b.x - pad)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h + pad) - Math.max(a.y, b.y - pad)), 0);
+const offscreen = (a) => Math.max(0, -a.x) + Math.max(0, a.x + a.w - innerWidth) + Math.max(0, -a.y) + Math.max(0, a.y + a.h - innerHeight);
+
 function fixBubble() {
   // extend away from the problem: target on the left -> bubble grows right, and vice versa
   let left = jepi.classList.contains('pointL') ? true : jepi.classList.contains('pointR') ? false : pos.x < 240;
-  if (left && pos.x + 236 > innerWidth) left = false;
-  if (!left && pos.x + W - 236 < 0) left = true;
+  const bw = bubble.offsetWidth || 260, bh = bubble.offsetHeight || 60;
+  if (left && pos.x + bw > innerWidth) left = false;
+  if (!left && pos.x + W - bw < 0) left = true;
+  let below = pos.y < bh + 24;
+  const obs = $('#marks').children.length ? obstacles() : [];
+  if (obs.length) [, left, below] = bubbleSpot(pos.x, pos.y, bw, bh, obs, left, below); // never cover a frame or its title
   bubble.classList.toggle('left', left);
-  bubble.classList.toggle('below', pos.y < bubble.offsetHeight + 24);
+  bubble.classList.toggle('below', below);
+}
+// best of the bubble's 4 corners for Jepi at (x, y) → [cost, left, below]; the preferred corner wins ties
+function bubbleSpot(x, y, bw, bh, obs, left = true, below = false) {
+  const box = (l, b) => ({ x: l ? x + 4 : x + W - 4 - bw, y: b ? y + H + 14 : y - 14 - bh, w: bw, h: bh });
+  return [[left, below], [!left, below], [left, !below], [!left, !below]]
+    .map(([l, b]) => [overlap(box(l, b), obs, 6) + offscreen(box(l, b)) * 1e5, l, b])
+    .reduce((a, c) => (c[0] < a[0] ? c : a));
 }
 function place(x, y) {
   pos = { x: Math.round(x), y: Math.round(y) };
   buddy.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-  fixBubble();
+  if (!jepi.classList.contains('flying')) fixBubble(); // mid-flight: no layout reads every frame (flyTo fixes it on landing)
 }
 let rainbowHue = 0;
 function trail(x, y) {
@@ -162,41 +184,14 @@ function flyTo(tx, ty, maxDur = 1400) {
       place(sx + (tx - sx) * e, sy + (ty - sy) * e - Math.sin(Math.PI * k) * Math.min(80, dist * 0.25));
       if (now - lastP > 28) { lastP = now; trail(pos.x + W / 2, pos.y + H * 0.6); }
       if (k < 1) requestAnimationFrame(step);
-      else { jepi.classList.remove('flying'); done(); }
+      else { jepi.classList.remove('flying'); fixBubble(); done(); }
     };
     requestAnimationFrame(step);
   });
 }
+let homeIsCorner = true; // until they drag Jepi somewhere
 const defaultHome = () => ({ x: innerWidth - W - 28, y: innerHeight - H - 28 });
 
-// ---------- summon: pop out of pie, dust off, yeet the pie ----------
-async function summon() {
-  jepi.classList.remove('p-pop', 'p-rise', 'p-dust', 'p-yeet');
-  jepi.classList.add('summon', 'p-pop');
-  setMood('idle');
-  caption.textContent = '';
-  await wait(450);
-  jepi.classList.replace('p-pop', 'p-rise');
-  await wait(600);
-  jepi.classList.replace('p-rise', 'p-dust');
-  say('*dusts off pie crumbs* 🥧 ew. sticky.');
-  for (let i = 0; i < 14; i++) {
-    const c = document.createElement('div');
-    c.className = 'particle crumb';
-    Object.assign(c.style, { left: pos.x + 14 + Math.random() * 60 + 'px', top: pos.y + 50 + Math.random() * 30 + 'px', animationDelay: Math.random() * 0.5 + 's' });
-    c.style.setProperty('--dx', Math.random() * 40 - 20 + 'px');
-    $('#fx').append(c);
-    setTimeout(() => c.remove(), 1400);
-  }
-  await wait(1000);
-  jepi.classList.replace('p-dust', 'p-yeet');
-  sfx('yeet');
-  setMood('hype', 1500);
-  say('*yeets the pie* 🥧💨');
-  await wait(850);
-  jepi.classList.remove('summon', 'p-yeet');
-  say(PERSONAS[persona].hello + ' your wish is my command 🧞 ⌘⇧Space = i find what\'s wrong. click me for the menu.');
-}
 
 // ---------- pinpoints ----------
 function clearMarks(stopTracking = true) { // fade pins + glove out instead of popping them away
@@ -216,7 +211,8 @@ function clearMarks(stopTracking = true) { // fade pins + glove out instead of p
 }
 // glove slides out of Jepi's hand, then taps the problem from above (or below if it's at the top edge)
 function showPointer(r) {
-  const tipX = r.width > 120 ? r.left + r.width - 34 : r.left + r.width / 2, down = r.top > 70; // stay clear of the label
+  // point where the text STARTS (left end of the box); the label sits at the right end so they never collide
+  const tipX = r.left + Math.min(28, r.width / 2), down = r.top > 70;
   if (!pointer.classList.contains('on')) { // first time: start in Jepi's hand
     pointer.style.transition = 'none';
     Object.assign(pointer.style, { left: pos.x + 'px', top: pos.y + H * 0.4 + 'px' });
@@ -229,8 +225,8 @@ function showPointer(r) {
     : { left: tipX - 13 + 'px', top: r.top + r.height + 2 + 'px' });
   setTimeout(() => pointer.classList.add('tap'), 460);
 }
+function done() { hush(); goHome(); cozy(false); } // the user confirmed: clear everything
 function goHome() {
-  buddy.classList.remove('away');
   clearMarks();
   jepi.classList.remove('pointL', 'pointR');
   if (!parked) return;
@@ -275,38 +271,55 @@ function showTargets({ targets = [], display, win: w }) {
   return rects;
 }
 async function parkBy(r) {
-  let x, side;
-  if (r.left + r.width + 14 + W < innerWidth) { x = r.left + r.width + 12; side = 'pointL'; }
-  else if (r.left - W - 12 > 0) { x = r.left - W - 12; side = 'pointR'; }
-  else { x = r.left + r.width / 2 - W / 2; side = 'pointL'; }
+  r = { ...r, left: r.left + trackOff.x, top: r.top + trackOff.y }; // follow the content if it scrolled
+  // closest spot (beside, above or below, stepping outward past neighbours) that covers NO frame or title
+  const obs = obstacles(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, hand = cy - H * 0.66, spots = [];
+  for (let d = 12; d < 400; d += 24) {
+    spots.push([r.left + r.width + d, hand], [r.left - W - d, hand], [cx - W / 2, r.top - H - 30 - d], [cx - W / 2, r.top + r.height + d],
+      [r.left + r.width + d, r.top - H - d], [r.left - W - d, r.top + r.height + d]);
+  }
+  // crowded page (card grids)? also try the whole screen on a coarse grid, so Jepi finds the nearest free gap
+  // grid step grows with the screen so a 4K display is ~2.5k spots, not 9k
+  const step = Math.max(30, Math.round(Math.sqrt((innerWidth * innerHeight) / 2500)));
+  for (let y = 6; y < innerHeight - H; y += step) for (let x = 6; x < innerWidth - W; x += step) spots.push([x, y]);
+  const fit = ([x, y]) => [clamp(x, 6, innerWidth - W - 6), clamp(y, 6, innerHeight - H - 6)]; // flyTo clamps the same way
+  const bw = Math.max(bubble.offsetWidth, 300), bh = Math.max(bubble.offsetHeight, 130); // room for the answer bubble too
+  // cost = overlap penalties + distance, so a spot farther than the best so far can't win: skip its overlap math
+  let best = null, bestCost = Infinity;
+  for (const s of spots) {
+    const [x, y] = fit(s), dist = Math.hypot(x + W / 2 - cx, y + H / 2 - cy);
+    if (dist >= bestCost) continue;
+    const c = dist + overlap({ x, y, w: W, h: H }, obs) * 50 + bubbleSpot(x, y, bw, bh, obs)[0] * 5;
+    if (c < bestCost) { bestCost = c; best = [x, y]; }
+  }
+  const [x, y] = best;
+  const side = x + W / 2 >= cx ? 'pointL' : 'pointR';
   jepi.classList.remove('pointL', 'pointR');
-  buddy.classList.add('away');
-  await flyTo(x, r.top + r.height / 2 - H * 0.66); // hand lands level with the problem
+  await flyTo(x, y); // hand lands level with the problem when there's room beside it
   jepi.classList.add(side);
   parked = true;
 }
 
 // ---------- looking ----------
-async function look(question = '', m = mode === 'watch' ? 'help' : mode, context = '') {
+async function look(question = '', m = 'help', context = '', region = null) {
   if (busy || hidden) return; // never peek while Jepi is hidden
-  if (asleep) { if (m !== 'watch') say('zzz… 😴 i\'m in sleep mode, not peeking. click me → 😴 to wake me.'); return; }
+  if (asleep) return say('zzz… 😴 i\'m in sleep mode, not peeking. click me → ☀️ to wake me.');
+  cozy(SIMPLE_ASK.test(question)); // asked for it simple? cozy grandma beanie on
   wake();
   tipsOff = true; // any real use cancels the first-run tips
   busy = true;
-  buddy.classList.add('away');
   $('#lookBtn').disabled = true;
-  clearTimeout(dismissTimer);
   clearMarks();
+  $('#pickmark').hidden = !region; // keep showing the box they asked about while thinking
   setMood('thinking');
-  say(pick(THINKING), 'thinking', 0);
+  say(pick(serious() ? STUDY_THINKING : THINKING), 'thinking', 0);
   jepi.classList.add('peeking');
   sfx('scan');
-  const res = await api.look({ question, mode: m, persona, context });
+  const res = await api.look({ question, mode: m, persona, context, region });
+  $('#pickmark').hidden = true;
   jepi.classList.remove('peeking');
   busy = false;
   $('#lookBtn').disabled = false;
-  if (!res.targets?.length) buddy.classList.remove('away');
-  if (res.skip) { setMood('idle'); return hush(); } // watch mode: screen unchanged
   if (res.error) { setMood('shook', 3000); sfx('bonk'); return say(`i crashed out 💀 ${res.error}`, 'err'); }
   present(res, question);
 }
@@ -314,42 +327,30 @@ async function look(question = '', m = mode === 'watch' ? 'help' : mode, context
 async function present(res, question = '') {
   addAura(res.aura);
   if (res.screenChanged) res.reply += '\n(you switched screens while i was thinking, so no pins 👀)';
-  if (pointerTimer) {
-    clearInterval(pointerTimer);
-    pointerTimer = null;
-  }
-  if (res.targets?.length) {
+  const rects = res.targets?.length ? showTargets(res) : [];
+  if (rects.length) {
     say('on my way 💨');
     sfx('whoosh');
-    const rects = showTargets(res);
-    if (rects.length) {
-      await parkBy(rects[0]);
-      showPointer(rects[0]);
-      let i = 0; // glove tours every problem, one after another
-      if (rects.length > 1) {
-        pointerTimer = setInterval(() => showPointer(rects[++i % rects.length]), 3000);
-      }
-    } else {
-      goHome();
-    }
-  } else {
-    goHome();
-  }
+    await parkBy(rects[0]);
+    showPointer(rects[0]);
+    if (rects.length > 1 && res.targets.some((t) => t.note)) return startTour(res, rects); // "explain line by line"
+    let i = 0; // glove tours every problem, one after another
+    if (rects.length > 1) pointerTimer = setInterval(() => showPointer(rects[++i % rects.length]), 3000);
+  } else goHome();
   sfx('ding');
   setMood(res.mood, 8000);
   lastReply = res.reply;
+  if (res.clean) { // double-tap code check found nothing wrong
+    return say(`${res.reply || 'no errors, your code looks perfect ✨'}${res.tip ? `\n⚡ ${res.tip}` : ''}\nwant me to explain how it works?`, '', 0,
+      [['🧭 yes, explain it', () => look('Explain how this code works, line by line / step by step.')], ['no thanks', done]]);
+  }
   const actions = [];
   if (res.edit?.find && res.edit.replace !== res.edit.find) actions.push(['🛠 apply fix', () => confirmFix(res)]);
   if (res.fix) actions.push(['📋 copy fix', () => { api.copy(res.fix); sfx('copy'); setMood('hype', 1200); say('copied ✅ paste it in, twin', '', 4000); }]);
-  actions.push(['🧒 eli5', () => look('explain that like I\'m 5, in one short sentence', 'help', lastReply)]);
+  actions.push(['🧒 explain simply', () => explainSimply(res.reply + (res.tip ? `\nTip: ${res.tip}` : '') + (res.fix ? `\nFix: ${res.fix}` : ''))]);
   actions.push(['↩ ask more', () => { followUp = true; openWish(); }]);
-  say(res.reply + (res.tip ? `\n⚡ ${res.tip}` : ''), '', 15000, actions);
-  clearTimeout(dismissTimer);
-  dismissTimer = setTimeout(goHome, mode === 'watch' ? 12000 : 15000);
-}
-function setWatch(on) {
-  clearInterval(watchTimer);
-  watchTimer = on ? setInterval(() => look('', 'watch'), 45000) : null; // and main skips it if the screen didn't change
+  actions.push(['✓ got it', done]);
+  say(res.reply + (res.tip ? `\n⚡ ${res.tip}` : ''), '', 0, actions); // stays until they confirm
 }
 
 // ---------- wardrobe + personas ----------
@@ -381,7 +382,9 @@ for (const [slot, opts] of Object.entries(WARDROBE)) {
 function setPersona(name, greet = true) {
   persona = name;
   save('jepi-persona', name);
-  $('#personaBtn').textContent = PERSONAS[name].emoji;
+  $('#personaBtn .ic').textContent = PERSONAS[name].emoji;
+  $('#personaName').textContent = PERSONA_NAMES[name] || name;
+  document.body.classList.toggle('serious', serious());
   document.querySelectorAll('#personas .chip').forEach((c) => c.setAttribute('aria-checked', c.dataset.persona === name));
   if (greet) { // a new persona comes with its signature fit (still customizable after)
     outfit = { ...PERSONAS[name].outfit };
@@ -408,55 +411,53 @@ function placeMenu() {
   Object.assign(dock.style, { left: clamp(left, 8, innerWidth - r.width - 8) + 'px', top: clamp(pos.y + H - r.height, 8, innerHeight - r.height - 8) + 'px' });
 }
 function openMenu() {
-  clearTimeout(dismissTimer);
+  for (const [pid, bid] of [['personas', 'personaBtn'], ['closet', 'closetBtn']]) { $('#' + pid).hidden = true; $('#' + bid).setAttribute('aria-expanded', false); }
   closeWish();
   caption.textContent = '';
   dock.classList.add('open');
   placeMenu();
-  api.clickThrough(false);
+  syncMouse();
 }
-function closeMenu() { dock.classList.remove('open'); if (!hovering) api.clickThrough(true); }
+function closeMenu() { dock.classList.remove('open'); syncMouse(); }
 function toggleMenu() { dock.classList.contains('open') ? closeMenu() : openMenu(); }
 function openWish() {
-  clearTimeout(dismissTimer);
   tipsOff = true;
   closeMenu();
   wish.classList.add('open');
-  const left = pos.x - 262 > 8 ? pos.x - 262 : pos.x + W + 12;
-  Object.assign(wish.style, { left: clamp(left, 8, innerWidth - 258) + 'px', top: clamp(pos.y + H / 2 - 23, 8, innerHeight - 54) + 'px' });
-  api.clickThrough(false);
+  const ww = wish.offsetWidth || 300, left = pos.x - ww - 12 > 8 ? pos.x - ww - 12 : pos.x + W + 12; // fully on screen, ➜ always clickable
+  Object.assign(wish.style, { left: clamp(left, 8, innerWidth - ww - 8) + 'px', top: clamp(pos.y + H / 2 - 23, 8, innerHeight - 54) + 'px' });
+  syncMouse();
   input.focus();
 }
-function closeWish() { wish.classList.remove('open'); input.blur(); if (!hovering) api.clickThrough(true); }
+function closeWish() {
+  wish.classList.remove('open');
+  input.blur();
+  input.placeholder = keys('make a wish… ✨');
+  syncMouse();
+}
 $('#personaBtn').onclick = () => togglePanel('personas');
 $('#closetBtn').onclick = () => togglePanel('closet');
 $('#quitBtn').onclick = () => api.quit();
 $('#lookBtn').onclick = () => { closeMenu(); look(); };
 $('#wishBtn').onclick = () => { openWish(); say('spill it, twin. what\'s your wish? 🧞', '', 0); };
 
-document.querySelectorAll('.seg .ico').forEach((p) => (p.onclick = () => {
-  document.querySelectorAll('.seg .ico').forEach((x) => { x.classList.toggle('on', x === p); x.setAttribute('aria-checked', x === p); });
-  mode = p.dataset.mode;
-  setWatch(mode === 'watch');
-  if (mode === 'watch') { say('ok i\'m watching 👁️👄👁️ i peek every 45s (only if your screen changed).'); look('', 'watch'); }
-  if (mode === 'roast') { setMood('judging', 2500); say('roast mode 🔥 hit 👀 if you\'re brave enough, twin.'); }
-  if (mode === 'help') say('help mode 🤓 hit 👀 and i\'ll fly to what\'s wrong.');
-}));
 
 $('#askForm').onsubmit = (e) => {
   e.preventDefault();
   const q = input.value.trim();
   input.value = '';
-  const ctx = followUp ? lastReply : '';
-  followUp = false;
+  if (!q && !pickRegion) { input.focus(); return say('type a question first ✨ or tap 🎯 to box an area', '', 4000); }
+  const ctx = followUp ? lastReply : '', region = pickRegion, pasted = pasteMode;
+  followUp = pasteMode = false;
+  pickRegion = null;
   closeWish();
   if (/^\s*(6\s*[-.,]?\s*7|six\s*-?\s*seven|sixty\s*-?\s*seven)\s*[!?.🤲]*\s*$/i.test(q)) return go67(); // the easter egg
-  if (q) look(q, mode === 'watch' ? 'help' : mode, ctx);
+  if (q && (pasted || CRASH.test(q))) return look(`I copied this error. Explain the cause and the exact fix, and point at where it happens if it's visible on screen:\n${q}`, 'help', ctx, region);
+  look(q || 'what is this / what\'s wrong here?', 'help', ctx, region);
 };
 
 // ---------- poke + drag ----------
 function poke() {
-  clearTimeout(dismissTimer);
   tipsOff = true;
   wake();
   setMood('shook', 1200);
@@ -465,9 +466,8 @@ function poke() {
   addAura(-1);
 }
 jepi.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMenu(); } };
-jepi.ondblclick = () => { clearTimeout(clickTimer); closeMenu(); poke(); };
 jepi.onpointerdown = (e) => {
-  clearTimeout(dismissTimer);
+  if (e.button !== 0) return; // left button only (right/middle clicks shouldn't drag or open the menu)
   const start = { ...pos }, sx = e.clientX, sy = e.clientY;
   let dragged = false, lastP = 0;
   jepi.setPointerCapture(e.pointerId);
@@ -480,18 +480,26 @@ jepi.onpointerdown = (e) => {
   jepi.onpointerup = () => {
     jepi.onpointermove = jepi.onpointerup = null;
     wake();
-    if (!dragged) { clearTimeout(clickTimer); clickTimer = setTimeout(toggleMenu, 250); return; } // wait: maybe it's a double-click
-    if (!parked) home = { ...pos };
+    if (!dragged) return tap();
+    if (!parked) { home = { ...pos }; homeIsCorner = false; }
     if (dock.classList.contains('open')) placeMenu();
   };
 };
 
-// click-through everywhere except over Jepi / the dock (or while typing)
-for (const el of [buddy, dock, wish]) {
-  el.onmouseenter = () => { hovering++; api.clickThrough(false); };
-  el.onmouseleave = () => { hovering = Math.max(0, hovering - 1); if (!hovering && document.activeElement !== input) api.clickThrough(true); };
+// who gets the mouse? ONE rule, checked against what's really under the cursor (enter/leave events are unreliable:
+// they don't fire when the menu closes under the pointer). Jepi catches clicks only over its own UI or while you're
+// boxing an area with 🎯; everywhere else clicks pass straight through to your apps.
+function syncMouse() {
+  const over = !!document.elementFromPoint(mouse.x, mouse.y)?.closest('#buddy, #dock, #askForm, #picker');
+  const want = over || picking;
+  if (want !== catching) { catching = want; api.clickThrough(!want); }
 }
-input.onblur = () => { if (!input.value.trim()) setTimeout(closeWish, 150); else if (!hovering) api.clickThrough(true); };
+let mouseFrame = 0;
+document.addEventListener('mousemove', (e) => {
+  mouse = { x: e.clientX, y: e.clientY };
+  if (!mouseFrame) mouseFrame = requestAnimationFrame(() => { mouseFrame = 0; syncMouse(); });
+});
+input.onblur = () => { if (!input.value.trim()) setTimeout(closeWish, 150); };
 input.onkeydown = (e) => { if (e.key === 'Escape') closeWish(); };
 
 function setHidden(h) {
@@ -504,43 +512,24 @@ api.onHotkey(async (k) => {
   if (k === 'look') { if (hidden) { setHidden(false); await wait(2900); } closeMenu(); look(); }
   if (k === 'ask') { if (hidden) setHidden(false); openWish(); say('spill it, twin. what do you need? 👂'); }
   if (k === 'hide') setHidden(!hidden);
-  if (k === 'clear') goHome();
+  if (k === 'clear') done();
   if (k === 'stale') goHome(); // the pinned content scrolled/changed: pin is outdated
-  if (k === 'moved') { parked = false; clearMarks(); quickSpin('new screen who dis 👀'); }
+  if (k === 'moved') { parked = false; clearMarks(); quickSpin(); }
   if (k === 'space' && !hidden) { // switched macOS desktop: quick spin
     clearMarks();
     jepi.classList.remove('pointL', 'pointR');
     parked = false;
-    quickSpin(pick(['new desktop who dis 👀', 'u can\'t escape me twin 🧞', 'followed you 🌀']));
-    if (mode === 'watch') setTimeout(() => look('', 'watch'), 1400);
+    quickSpin();
   }
   if (k === 'demo') { if (hidden) setHidden(false); runDemo(); }
 });
 
-// 6 then 7 = 6-7
-let lastKey = '', lastAt = 0;
-document.addEventListener('keydown', (e) => {
-  if (e.target === input) return;
-  if (e.key === '7' && lastKey === '6' && Date.now() - lastAt < 1200) go67();
-  lastKey = e.key; lastAt = Date.now();
-});
 
-// eyes follow the cursor across the whole screen (1 pixel each way, 8-bit style)
-const pupils = [...document.querySelectorAll('.pupil')];
-let eyeFrame = 0;
-document.addEventListener('mousemove', (e) => { // eyes follow the cursor, at most once per frame
-  if (eyeFrame) return;
-  eyeFrame = requestAnimationFrame(() => {
-    eyeFrame = 0;
-    const dx = Math.sign(Math.round((e.clientX - (pos.x + W / 2)) / 80)), dy = Math.sign(Math.round((e.clientY - (pos.y + H * 0.35)) / 80));
-    for (const p of pupils) p.style.transform = `translate(${dx}px, ${dy}px)`;
-  });
-});
 
 // overlay hopped to another monitor (or resized): re-home Jepi in that screen's corner
 addEventListener('resize', () => {
   const keep = (p) => ({ x: clamp(p.x, 6, innerWidth - W - 6), y: clamp(p.y, 6, innerHeight - H - 6) });
-  home = keep(home);
+  home = homeIsCorner ? defaultHome() : keep(home);
   const n = keep(pos);
   if (n.x !== pos.x || n.y !== pos.y) flyTo(n.x, n.y); // only nudge back if it ended up off-screen
 });

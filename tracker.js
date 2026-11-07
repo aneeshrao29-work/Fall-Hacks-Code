@@ -1,6 +1,6 @@
 // Screen comparison + pin tracking on small grayscale frames (Electron NativeImage → BGRA bitmap). Pure JS.
 
-function toGray(img) {
+function toGray(img, reuse) { // pass `reuse` (a previous frame) to recycle its buffer instead of allocating
   if (!img || img.isEmpty()) return { w: 0, h: 0, px: new Uint8Array(0) };
   const { width, height } = img.getSize();
   if (width <= 0 || height <= 0) return { w: 0, h: 0, px: new Uint8Array(0) };
@@ -8,7 +8,7 @@ function toGray(img) {
   const pxLen = width * height;
   if (b.length < pxLen * 4) return { w: 0, h: 0, px: new Uint8Array(0) };
 
-  const px = new Uint8Array(pxLen);
+  const px = reuse?.px?.length === pxLen ? reuse.px : new Uint8Array(pxLen);
   // ITU-R BT.601 integer grayscale conversion: (B * 29 + G * 150 + R * 77) >> 8
   for (let i = 0, j = 0; j < pxLen; i += 4, j++) {
     px[j] = (b[i] * 29 + b[i + 1] * 150 + b[i + 2] * 77) >> 8;

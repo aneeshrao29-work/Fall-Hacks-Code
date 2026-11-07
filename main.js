@@ -3,9 +3,11 @@
 const { app, BrowserWindow, screen, desktopCapturer, globalShortcut, ipcMain, systemPreferences, clipboard } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { MOODS, MODES, SCHEMA, buildSystem } = require('./prompts');
+const { MOODS, MODES, SCHEMA, buildSystem, SIMPLE_SYSTEM, SIMPLE_SCHEMA } = require('./prompts');
 const { applyFix, undoFix } = require('./fixer');
 const { toGray, makePatch, findPatch, screenDiff } = require('./tracker');
+const { importSyllabus, dueSoon, showCalendarFile } = require('./syllabus');
+const { checkResume } = require('./resume');
 
 // Robust .env loader (no external dependencies, safe on Windows CRLF)
 try {
@@ -37,7 +39,7 @@ const LINUX = process.platform === 'linux';
 const TRACK_W = 960; // capture width for change checks + pin tracking (every frame must use the same size)
 if (LINUX) app.commandLine.appendSwitch('enable-transparent-visuals');
 
-let win = null;
+let win = null, lastShot = null;
 let curDisplay = null;
 let cursorTimer = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -105,7 +107,10 @@ async function grabOnce(d, width) {
 
   try {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width, height } });
-    const src = sources.find((s) => s.display_id === String(d.id)) || sources[0];
+    // Windows often leaves display_id empty: fall back to the display's position in the list (screen:<index>:0)
+    const idx = screen.getAllDisplays().findIndex((x) => x.id === d.id);
+    const src = sources.find((s) => s.display_id === String(d.id)) || sources.find((s) => s.id === `screen:${idx}:0`)
+      || sources[idx] || sources[0];
     return src && !src.thumbnail.isEmpty() ? src.thumbnail : null;
   } finally {
     if (win && !win.isDestroyed()) {
@@ -165,14 +170,14 @@ function startTracking(d, first, box) {
   const sy = d.size.height / first.h;
   const t0 = Date.now();
   let prev = { dx: 0, dy: 0 };
-  let busy = false;
+  let busy = false, frame = null;
 
   trackTimer = setInterval(async () => {
     if (busy) return;
-    if (Date.now() - t0 > 30000) return stopTracking();
+    if (Date.now() - t0 > 300000) return stopTracking(); // pins stay until dismissed; stop watching after 5 min
     busy = true;
     try {
-      const frame = toGray(await grab(d, TRACK_W));
+      frame = toGray(await grab(d, TRACK_W), frame); // reuses the same buffer every tick
       if (!trackTimer) return;
       // blank-ish pins can't be tracked: they just unpin when the screen changes
       const m = patch.flat
@@ -197,141 +202,115 @@ function startTracking(d, first, box) {
 }
 
 // ---------- Gemini ----------
-async function askGemini(image, question, mode, persona, context) {
+// one place that talks to Gemini: model fallback, timeout, JSON parsing. Used for screen looks AND syllabus PDFs.
+async function callGemini({ system, parts, schema, timeout = 25000 }) {
   if (!KEY) throw new Error('GEMINI_API_KEY missing — put it in .env');
-
-  const body = {
-    systemInstruction: { parts: [{ text: buildSystem(persona) }] },
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          { inline_data: { mime_type: 'image/jpeg', data: image } },
-          {
-            text: `${MODES[mode] || MODES.help}\n${
-              context ? `Your previous answer (they may be following up): ${context}\n` : ''
-            }User says: ${question || '(nothing — just look at my screen)'}`,
-          },
-        ],
-      },
-    ],
-  };
-
-  let data, lastErr;
+  let lastErr;
   for (const model of MODELS) {
-    const generationConfig = {
-      responseMimeType: 'application/json',
-      responseSchema: SCHEMA,
-      temperature: 1,
-      ...(model.startsWith('gemini-3') && { thinkingConfig: { thinkingLevel: 'low' } }),
-    };
-
+    const generationConfig = { responseMimeType: 'application/json', responseSchema: schema, temperature: 1,
+      ...(model.startsWith('gemini-3') && { thinkingConfig: { thinkingLevel: 'low' } }) };
     const t0 = Date.now();
     try {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
-        signal: AbortSignal.timeout(25000), // an overloaded model can hang forever otherwise
+        signal: AbortSignal.timeout(timeout), // an overloaded model can hang forever otherwise
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KEY },
-        body: JSON.stringify({ ...body, generationConfig }),
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts }], generationConfig }),
       });
-
-      let json = {};
-      try {
-        json = await r.json();
-      } catch {
-        json = { error: { message: `HTTP ${r.status} non-JSON response` } };
-      }
-
+      const json = await r.json().catch(() => ({ error: { message: `HTTP ${r.status} non-JSON response` } }));
       console.log(`[gemini] ${model} → ${r.status} in ${Date.now() - t0}ms`);
-      if (r.ok && json.candidates?.[0]?.content?.parts?.[0]?.text) {
-        data = json;
-        break;
-      }
-
-      const msg = json.error?.message || (r.ok ? 'empty reply from model' : `status ${r.status}`);
-      lastErr = new Error(`Gemini said no (${r.status}): ${msg}`.slice(0, 300));
-      if (!r.ok && !RETRYABLE.has(r.status)) break;
+      const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (r.ok && text) return JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g, ''));
+      lastErr = new Error(`Gemini said no (${r.status}): ${json.error?.message || 'empty reply'}`.slice(0, 300));
+      if (r.ok || !RETRYABLE.has(r.status)) break;
     } catch (e) {
       lastErr = new Error(e.name === 'TimeoutError' ? 'gemini is taking forever rn, try again' : e.message);
+      if (e instanceof SyntaxError) break; // bad JSON from a model that answered: retrying elsewhere won't help
     }
   }
+  throw lastErr || new Error('failed to reach Gemini');
+}
 
-  if (!data) throw lastErr || new Error('failed to reach Gemini');
-
-  const rawText = data.candidates[0].content.parts[0].text.trim();
-  const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
-
-  let out;
-  try {
-    out = JSON.parse(cleaned);
-  } catch (err) {
-    console.warn('[gemini] parse failure on output:', cleaned);
-    throw new Error(`gemini returned invalid JSON: ${err.message}`);
-  }
-
-  const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+const str = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
+async function askGemini(image, question, mode, persona, context, region) {
+  const out = await callGemini({
+    system: buildSystem(persona),
+    parts: [
+      { inline_data: { mime_type: 'image/jpeg', data: image } },
+      { text: [
+        `Task: ${MODES[mode] || MODES.help}`,
+        region && `The user boxed this part of the screen: box_2d [${region.join(', ')}]. Answer ONLY about what is inside that box; targets must be inside it.`,
+        context && `Your previous answer (they are following up): ${context}`,
+        `User says: ${question || '(nothing — just look at my screen)'}`,
+      ].filter(Boolean).join('\n') },
+    ],
+  });
   const e = out.edit && typeof out.edit === 'object' ? out.edit : {};
-
   return {
-    reply: str(out.reply, 1200),
-    fix: str(out.fix, 2000),
-    tip: str(out.tip, 300),
-    edit: {
-      file: str(e.file, 200),
-      find: str(e.find, 2000),
-      replace: str(e.replace, 2000),
-    },
+    reply: str(out.reply, 1200), fix: str(out.fix, 2000), tip: str(out.tip, 300),
+    clean: out.clean === true,
+    edit: { file: str(e.file, 200), find: str(e.find, 2000), replace: str(e.replace, 2000) },
     mood: MOODS.includes(out.mood) ? out.mood : 'sassy',
     aura: Math.max(-67, Math.min(67, Math.round(Number(out.aura) || 0))),
     targets: (Array.isArray(out.targets) ? out.targets : [])
       .filter((t) => t && Array.isArray(t.box_2d) && t.box_2d.length === 4 && t.box_2d.every((n) => Number.isFinite(Number(n))))
-      .filter((t) => {
-        const [y0, x0, y1, x1] = t.box_2d;
-        return Math.abs((y1 - y0) * (x1 - x0)) / 1e6 < 0.6; // vague/huge = no pin
-      })
-      .slice(0, 3)
-      .map((t) => ({
-        label: str(t.label, 80) || 'here 👀',
-        box_2d: t.box_2d.map((n) => Math.round(Number(n))),
-      })),
+      .map((t) => ({ label: str(t.label, 80) || 'here 👀', note: str(t.note, 400), box_2d: t.box_2d.map((n) => Math.round(Number(n))) }))
+      .filter(({ box_2d: [y0, x0, y1, x1] }) => Math.abs((y1 - y0) * (x1 - x0)) / 1e6 < 0.6) // vague/huge = no pin
+      .slice(0, 20), // "find all…" can pin up to 20 things
   };
 }
 
 // ---------- IPC ----------
-let lastWatch = null;
-ipcMain.handle('look', async (_e, { question = '', mode = 'help', persona = 'bestie', context = '' } = {}) => {
+// region comes from the renderer in overlay-window pixels → convert to Gemini's 0-1000 screen coordinates
+function regionToBox(region, d) {
+  if (!region || !(region.w > 4 && region.h > 4)) return null;
+  const b = win.getBounds(), n = (v, o, size) => Math.max(0, Math.min(1000, Math.round(((v + o) / size) * 1000)));
+  return [n(region.y, b.y - d.bounds.y, d.size.height), n(region.x, b.x - d.bounds.x, d.size.width),
+    n(region.y + region.h, b.y - d.bounds.y, d.size.height), n(region.x + region.w, b.x - d.bounds.x, d.size.width)];
+}
+ipcMain.handle('look', async (_e, { question = '', mode = 'help', persona = 'bestie', context = '', region = null } = {}) => {
   try {
     const d = jumpToCursorDisplay();
     stopTracking();
     const shot = await grab(d, 1600); // what Gemini sees
+    lastShot = shot.toJPEG(75).toString('base64'); // reused by "explain simply" (no second screenshot)
     const before = toGray(await grab(d, TRACK_W)); // same-size frame for change checks + tracking
-    if (mode === 'watch') { // only bother them when the screen actually changed
-      const same = lastWatch && lastWatch.w === before.w && screenDiff(lastWatch, before) < 1;
-      lastWatch = before;
-      if (same) return { skip: true };
-    }
-    const res = await askGemini(
-      shot.toJPEG(75).toString('base64'),
-      String(question).slice(0, 500),
-      mode,
-      persona,
-      String(context).slice(0, 600)
-    );
-    // did they switch windows / scroll while Gemini was thinking? then the boxes point at the wrong thing:
+    const res = await askGemini(lastShot, String(question).slice(0, 3500), mode, persona,
+      String(context).slice(0, 600), regionToBox(region, d));
+    // did they switch windows / scroll while Gemini was thinking? then boxes would point at the wrong thing:
     // answer in the bubble only, no pins
     const after = toGray(await grab(d, TRACK_W));
-    if (screenDiff(before, after) > 3) {
-      res.targets = [];
-      res.screenChanged = true;
-    } else if (res.targets.length) {
-      startTracking(d, after, res.targets[0].box_2d);
+    // a spinner or video elsewhere is fine: only drop pins when the pinned thing itself is gone
+    if (res.targets.length) {
+      const p = makePatch(before, res.targets[0].box_2d);
+      if (p.flat ? screenDiff(before, after) > 3 : findPatch(after, p).score > 7) { res.targets = []; res.screenChanged = true; }
+      else startTracking(d, before, res.targets[0].box_2d); // track from what Gemini saw, so a scroll mid-think still moves the pins
     }
-    return { ...res, display: d.bounds, win: win ? win.getBounds() : d.bounds };
+    return { ...res, display: d.bounds, win: win.getBounds() };
   } catch (e) {
     return { error: e.message };
   }
 });
-
+// 🧒 explain simply: rewrite the last answer in plain words, using the SAME screenshot (fast, no flying around)
+ipcMain.handle('explain-simple', async (_e, { text = '' } = {}) => {
+  try {
+    const parts = [...(lastShot ? [{ inline_data: { mime_type: 'image/jpeg', data: lastShot } }] : []),
+      { text: `Explain this simply:\n${String(text).slice(0, 2000)}` }];
+    const out = await callGemini({ system: SIMPLE_SYSTEM, parts, schema: SIMPLE_SCHEMA });
+    return { reply: str(out.reply, 900) };
+  } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('syllabus', async (_e, { paths } = {}) => {
+  try { return await importSyllabus(win, paths, callGemini); } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('due-soon', () => dueSoon(7));
+ipcMain.handle('resume', async (_e, { file } = {}) => {
+  try {
+    const shoot = async () => (await grab(jumpToCursorDisplay(), 1600)).toJPEG(75).toString('base64');
+    return await checkResume(win, file, shoot, callGemini);
+  } catch (e) { return { error: e.message }; }
+});
+ipcMain.on('show-ics', showCalendarFile);
 ipcMain.on('clickthrough', (_e, on) => {
   if (win && !win.isDestroyed()) {
     win.setIgnoreMouseEvents(Boolean(on), { forward: true });
@@ -339,6 +318,7 @@ ipcMain.on('clickthrough', (_e, on) => {
 });
 ipcMain.on('quit', () => app.quit());
 ipcMain.on('unpin', stopTracking);
+ipcMain.on('focus', () => { if (win && !win.isDestroyed()) win.focus(); });
 ipcMain.on('copy', (_e, text) => clipboard.writeText(String(text).slice(0, 5000)));
 
 ipcMain.handle('apply-fix', async (_e, edit) => {
@@ -368,7 +348,7 @@ app.whenReady().then(async () => {
       if (!win || win.isDestroyed()) return;
       const c = screen.getCursorScreenPoint(), b = win.getBounds();
       send('cursor', { x: c.x - b.x, y: c.y - b.y });
-    }, 100);
+    }, 33);
   }
 
   const hotkey = (k) => send('hotkey', k);

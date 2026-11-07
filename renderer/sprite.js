@@ -4,7 +4,7 @@ const VIEWBOX = '-1 -5 44 47';
 const PAL = {
   k: '#161616', g: '#5aa994', b: '#9dcfd8', m: '#74f5d2', n: '#06038d', p: '#ee8888', r: '#e85a57', w: '#ffffff',
   y: '#f7c948', c: '#f2b25c', l: '#ffd79a', t: '#a9cde0', s: '#7fb0cc', u: '#5fb4ff', v: '#6b3fa0', o: '#8a5a2b',
-  d: '#a8243a', R: '#e8384f',
+  d: '#a8243a', R: '#e8384f', G: '#4a8d7b', B: '#86bcc6', L: '#7fc6b1', e: '#cfd6d4',
 };
 const SVGNS = 'http://www.w3.org/2000/svg';
 
@@ -167,19 +167,28 @@ function buildTwin(svg) {
 }
 
 // back view for the 2.5D spin: same body seen from behind (rotateY(180) mirrors it for us), no face, a little vent
+// the BACK of Jepi: the underside of a Raspberry Pi board (not a copy of the face).
+// Spans use front-view coordinates, then the group is mirrored (x → 42 - x) so it reads correctly from BEHIND:
+// the ports (on Jepi's left) appear on the viewer's right, the blue side on the viewer's left — like a real object.
 function buildBack(svg) {
   svg.setAttribute('viewBox', VIEWBOX);
   svg.setAttribute('shape-rendering', 'crispEdges');
-  const g = grp();
-  paint(g, headSpans().filter((s) => s[3] !== 'm'));
-  paint(g, tabSpans());
-  paint(g, [...box(14, 12, 24, 12, 'k'), ...box(14, 15, 24, 15, 'k'), ...box(14, 18, 24, 18, 'k'), ...ring(16, 21, 22, 25, 'k'), [23, 19, 19, 'y']]);
+  const g = grp({ transform: 'translate(42 0) scale(-1 1)' });
+  paint(g, [...blob(9, 6, 36, 28, 'G'), ...box(30, 8, 35, 26, 'B'), [7, 30, 34, 'B'], [27, 30, 34, 'B']]); // same two-tone body, darker
+  const hole = (x, y) => [[y - 1, x - 1, x + 1, 'y'], [y, x - 1, x - 1, 'y'], [y, x, x, 'k'], [y, x + 1, x + 1, 'y'], [y + 1, x - 1, x + 1, 'y']];
+  paint(g, [...hole(12, 9), ...hole(33, 9), ...hole(12, 25), ...hole(33, 25)]); // mounting holes
+  paint(g, dots([16, 18, 20, 22, 24, 26, 28].map((x) => [x, 8]), 'y')); // GPIO header solder pads
+  paint(g, [...box(15, 13, 22, 18, 'k'), ...dots([16, 18, 20].map((x) => [x, 12]).concat([16, 18, 20].map((x) => [x, 19])), 'e')]); // main chip
+  paint(g, [...box(25, 14, 28, 17, 'k'), [13, 26, 26, 'e'], [18, 26, 26, 'e']]); // small chip
+  paint(g, [[21, 11, 14, 'L'], [21, 23, 31, 'L'], ...box(23, 18, 23, 20, 'L'), [11, 23, 30, 'L'], ...box(30, 11, 30, 13, 'L')]); // traces
+  paint(g, [...box(16, 22, 22, 26, 'w'), [23, 18, 18, 'r'], [23, 20, 20, 'r'], [24, 18, 20, 'r'], [25, 19, 19, 'r']]); // sticker ♥
+  paint(g, tabSpans()); // back of the port column
   paint(g, box(13, 29, 31, 30, 'k'));
   for (let i = 0; i < 7; i++) { const x = 15 + i * 2; paint(g, [[31, x - 1, x + 1, 'k'], [32, x - 1, x - 1, 'k'], [32, x + 1, x + 1, 'k'], [33, x - 1, x + 1, 'k']]); }
   paint(g, dots([[12, 30], [11, 30], [10, 31], [9, 31], [8, 31], [7, 30], [6, 29], [5, 28], [4, 27], [3, 26], [4, 25], [5, 26]], 'k'));
   paint(g, dots([[32, 30], [33, 30], [34, 31], [35, 31], [36, 31], [37, 30], [38, 29], [39, 28], [40, 27], [41, 26], [40, 25], [39, 26]], 'k'));
-  for (const [n, s] of Object.entries(WEAR.hat)) g.append(paint(grp({ class: 'wear hat', 'data-name': n, transform: HAT_SHIFT }), s));
-  g.append(paint(grp({ class: 'wear fit', 'data-name': 'cape' }), WEAR.fit.cape)); // cape covers the back
+  for (const [n, sp] of Object.entries(WEAR.hat)) g.append(paint(grp({ class: 'wear hat', 'data-name': n, transform: HAT_SHIFT }), sp));
+  g.append(paint(grp({ class: 'wear fit', 'data-name': 'cape' }), WEAR.fit.cape)); // a cape covers the back
   svg.append(g);
 }
 

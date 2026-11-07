@@ -5,7 +5,9 @@
   "description": "JepiTheGenie: a sassy pixel genie hovering AI sidekick that watches your screen and pinpoints what's wrong",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "test": "node tests/unit.js && electron tests/e2e.js",
+    "test:unit": "node tests/unit.js"
   },
   "license": "MIT",
   "devDependencies": {

@@ -40,6 +40,12 @@ Emoji need an emoji font on Linux (`sudo apt install fonts-noto-color-emoji`).
 | Esc | Close everything, Jepi flies home |
 Drag Jepi anywhere. Click Jepi to poke it. Type `67` for a surprise.
 
+## Tests
+```bash
+npm test                       # 41 unit + 30 end-to-end tests (real app, fake Gemini, fails on any JS error)
+ONLY="syllabus" npx electron tests/e2e.js   # run one end-to-end test by name
+```
+
 ## Who does what
 | Person | Job | Done when |
 |---|---|---|

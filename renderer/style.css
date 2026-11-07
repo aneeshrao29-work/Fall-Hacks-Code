@@ -4,10 +4,11 @@
   /* notched 8-bit border + chunky drop shadow */
   --px: 0 0 0 3px var(--ink), 0 6px 0 3px var(--drop); /* rounded outline + soft drop (follows border-radius) */
   --r: 14px;
+  --ui: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif; /* readable on every OS */
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100vh; overflow: hidden; background: transparent; }
-body { color: var(--ink); font: 15px/1.35 "Pixelify Sans", monospace; user-select: none; -webkit-font-smoothing: none; }
+body { color: var(--ink); font: 15px/1.35 var(--ui); user-select: none; }
 svg { shape-rendering: crispEdges; }
 button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 
@@ -30,21 +31,24 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 #sprite { transform: translateZ(12px); backface-visibility: hidden; }
 #spriteBack { transform: rotateY(180deg) translateZ(12px); backface-visibility: hidden; }
 .face3 { position: absolute; display: block; box-shadow: inset 0 0 0 2px var(--ink); }
-/* Jepi is a Raspberry Pi: left side = the stacked ports (same colors/heights as the front tabs) */
+/* 2.5D body (88x94 box, 2px = 1 sprite pixel, 24px deep). Head: x 20-76, y 22-68. Port column: x 10-34, y 26-62. */
+/* head's left side (plain board green; the ports have their own block below) */
 .side-l { left: 8px; top: 22px; width: 24px; height: 46px; transform: rotateY(-90deg);
-  background:
-    linear-gradient(90deg, transparent 0 4px, rgba(0, 0, 0, .18) 4px 6px, transparent 6px) 0 0 / 100% 100%,
-    linear-gradient(#457f6f 0 6px, #06038d 6px 18px, #161616 18px 20px, #ee8888 20px 32px, #161616 32px 34px,
-      #e85a57 34px 38px, #457f6f 38px 46px); }
-/* right side = light-blue edge with an SD-card slot */
+  background: linear-gradient(#4f9583, #3f7f6e); }
+/* head's right side = the light-blue part, with an SD-card slot */
 .side-r { left: 64px; top: 22px; width: 24px; height: 46px; transform: rotateY(90deg);
   background: linear-gradient(#161616, #161616) 50% 62% / 12px 4px no-repeat, linear-gradient(#8ec3cc 0 50%, #7db3bd 50%); }
-/* lid = board top: green + blue strip, gold GPIO header along the edge */
+/* head's top: two-tone like the body, gold GPIO header along it */
 .lid { left: 20px; top: 10px; width: 56px; height: 24px; transform: rotateX(90deg);
   background:
     repeating-linear-gradient(90deg, #f7c948 0 2px, #161616 2px 4px) 6px 4px / 32px 2px no-repeat,
     repeating-linear-gradient(90deg, #f7c948 0 2px, #161616 2px 4px) 6px 8px / 32px 2px no-repeat,
     linear-gradient(90deg, #6dbaa5 0 72%, #b8e2ea 72%); }
+/* the port column is its own little block: outer side shows the stacked ports, plus a top */
+.port-l { left: -2px; top: 26px; width: 24px; height: 36px; transform: rotateY(-90deg);
+  background: linear-gradient(#161616 0 2px, #0a0870 2px 14px, #161616 14px 16px, #d77474 16px 28px, #161616 28px 30px,
+    #c94a47 30px 34px, #161616 34px 36px); }
+.port-t { left: 10px; top: 14px; width: 10px; height: 24px; transform: rotateX(90deg); background: #0a0870; }
 .spin3d { animation: sway3d 4s steps(8) infinite alternate; }
 [data-mood="thinking"] .spin3d { animation: revolve3d 1.4s steps(14) infinite; }
 .jepi.flying .spin3d, .jepi.summon .spin3d { animation: none; }
@@ -52,7 +56,7 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .jepi:not(.summon) #pieSvg { display: none; }
 
 .bubble {
-  position: absolute; right: 4px; bottom: calc(100% + 14px); width: 220px; padding: 8px 10px;
+  position: absolute; right: 4px; bottom: calc(100% + 14px); width: max-content; min-width: 240px; max-width: 360px; padding: 9px 12px;
   background: #fff; box-shadow: var(--px); user-select: text; z-index: 3; font-size: 14px;
 }
 .bubble #caption { display: block; max-height: 34vh; overflow: auto; font: 500 14px/1.4 ui-rounded, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: auto; }
@@ -88,11 +92,12 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 
 /* ---------- dock ---------- */
 .dock {
-  position: fixed; left: 0; top: 0; width: 284px; z-index: 7; display: none; flex-direction: column; gap: 8px;
-  padding: 8px; background: #fff; box-shadow: var(--px); transition: opacity .2s;
+  position: fixed; left: 0; top: 0; width: 268px; z-index: 7; display: none; flex-direction: column; gap: 6px;
+  padding: 6px; border-radius: 14px; background: #fff; box-shadow: var(--px); transition: opacity .2s;
+  max-height: calc(100vh - 24px); overflow: hidden auto; /* small screens: scroll instead of falling off the bottom */
 }
 .wish {
-  position: fixed; left: 0; top: 0; z-index: 8; width: 250px; display: none; gap: 6px; padding: 6px;
+  position: fixed; left: 0; top: 0; z-index: 8; width: 300px; display: none; gap: 6px; padding: 6px;
   background: #fff; box-shadow: var(--px);
 }
 .wish.open { display: flex; animation: pop .18s cubic-bezier(.2, .9, .3, 1.15); }
@@ -104,15 +109,6 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .btn.go { width: 38px; height: 34px; font-size: 18px; font-weight: 700; background: var(--gold); box-shadow: inset 0 0 0 3px var(--ink), 0 4px var(--drop); }
 .btn.go:active { transform: translateY(3px); box-shadow: inset 0 0 0 3px var(--ink); }
 .btn.go:disabled { opacity: .5; cursor: wait; }
-.tools { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-.seg { display: flex; margin-right: auto; box-shadow: inset 0 0 0 3px var(--ink); padding: 3px; }
-.ico { width: 32px; height: 32px; font-size: 16px; background: #fff; }
-.tools > .ico { box-shadow: inset 0 0 0 3px var(--ink); }
-.ico.on { background: var(--ink); }
-.ico:hover { background: var(--gold); }
-.ico.on:hover { background: var(--ink); }
-.ico.act { background: var(--gold); box-shadow: inset 0 0 0 3px var(--ink); }
-.ico:disabled { opacity: .5; cursor: wait; }
 .panel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
 .panel[hidden] { display: none; }
 .chip { padding: 4px 2px; font-size: 12px; line-height: 1.2; background: var(--cream); box-shadow: inset 0 0 0 2px var(--ink); }
@@ -134,11 +130,11 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .mark::before, .mark::after { content: ""; position: absolute; width: 9px; height: 9px; background: var(--gold); outline: 3px solid var(--ink); }
 .mark::before { left: -9px; top: -9px; } .mark::after { right: -9px; bottom: -9px; }
 .mark .tag {
-  position: absolute; left: -6px; bottom: calc(100% + 12px); white-space: nowrap; padding: 2px 8px; font-weight: 700;
+  position: absolute; right: -6px; bottom: calc(100% + 12px); white-space: nowrap; padding: 2px 8px; font-weight: 700;
   color: #fff; background: var(--red); box-shadow: var(--px);
 }
 .mark.below .tag { bottom: auto; top: calc(100% + 12px); }
-.mark .num { position: absolute; top: -14px; right: -26px; padding: 0 5px; font-weight: 700; background: var(--gold); box-shadow: var(--px); }
+.mark .num { position: absolute; top: -14px; left: -30px; padding: 0 5px; font-weight: 700; background: var(--gold); box-shadow: var(--px); }
 /* the pixel pointing glove: slides out of Jepi and taps the problem */
 #pointer { position: fixed; left: 0; top: 0; z-index: 7; pointer-events: none; display: none; width: 36px; height: 48px;
   transition: left .5s cubic-bezier(.2, .8, .2, 1), top .5s cubic-bezier(.2, .8, .2, 1), transform .22s cubic-bezier(.2, .8, .2, 1), opacity .2s ease;
@@ -154,7 +150,7 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .particle.crumb { width: 6px; height: 6px; background: #f2b25c; animation: crumb .7s steps(5) forwards; }
 
 .banner {
-  position: fixed; top: 40px; left: 50%; z-index: 10; padding: 8px 20px; white-space: nowrap; font-size: 26px; font-weight: 700;
+  position: fixed; top: 40px; left: 50%; z-index: 10; pointer-events: none; padding: 8px 20px; white-space: nowrap; font-size: 26px; font-weight: 700;
   background: var(--gold); box-shadow: var(--px); transform: translate(-50%, -400%); transition: transform .4s cubic-bezier(.2, 1.3, .4, 1);
 }
 .banner.show { transform: translate(-50%, 0); }
@@ -223,9 +219,10 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 
 /* summon: pie pops in → Jepi climbs out → dusts off crumbs → yeets the pie */
 .p-pop #pieSvg { animation: piePop .45s steps(5) both; }
-.p-pop #body, .p-pop #sparkles { visibility: hidden; }
-.p-rise #body { animation: climb .6s steps(6) both; }
-.p-dust #body { animation: shake .12s steps(1) infinite; }
+/* the whole 2.5D body (front + back + sides + lid) moves as ONE piece, so no panel shows up early */
+.jepi.summon.p-pop .spin3d, .p-pop #sparkles { visibility: hidden; }
+.jepi.summon.p-rise .spin3d { animation: climb3d .6s steps(6) both; }
+.jepi.summon.p-dust .spin3d { animation: shake3d .12s steps(1) infinite; }
 .p-dust #armL { animation: waveL .12s steps(1) infinite; }
 .p-yeet #pieSvg { animation: yeet .8s steps(8) forwards; }
 
@@ -254,6 +251,8 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 @keyframes swap { from { transform: scale(.6); } }
 @keyframes bump { 50% { transform: scale(1.3); } }
 @keyframes piePop { from { transform: scale(0); } 70% { transform: scale(1.2); } to { transform: scale(1); } }
+@keyframes climb3d { from { transform: translateY(52px); } 70% { transform: translateY(-10px); } to { transform: none; } }
+@keyframes shake3d { 0% { transform: translateX(-2px); } 50% { transform: translateX(2px); } }
 @keyframes climb { from { transform: translateY(26px); } 70% { transform: translateY(-5px); } to { transform: none; } }
 @keyframes yeet { to { transform: translate(160px, -40px) rotate(720deg) scale(.4); opacity: 0; } }
 @keyframes drift { to { transform: translateY(18px) scale(.4); opacity: 0; } }
@@ -268,9 +267,7 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .bubble #caption { border-radius: 8px; }
 .aura, .cc { border-radius: 999px; }
 .banner, .mark .tag, .mark .num { border-radius: 12px; }
-.chip, .ico, .btn.go, .wish input, .acts button { border-radius: 10px; }
-.seg { border-radius: 12px; }
-.seg .ico { border-radius: 8px; }
+.chip, .btn.go, .wish input, .acts button { border-radius: 10px; }
 .mark { border-radius: 12px; outline-offset: 0; }
 .mark::before, .mark::after { border-radius: 50%; }
 .particle.crumb { border-radius: 2px; }
@@ -282,8 +279,8 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 .bubble.hushing, .mark.out, #pointer.out { opacity: 0; }
 .bubble.hushing, .mark.out { transform: scale(.96); }
 @keyframes bubbleIn { from { opacity: 0; transform: scale(.92) translateY(6px); } }
-.chip, .ico, .btn.go, .acts button { transition: background .12s ease, transform .12s ease, box-shadow .12s ease; }
-.chip:hover, .ico:hover, .acts button:hover { transform: translateY(-1px); }
+.chip, .btn.go, .acts button { transition: background .12s ease, transform .12s ease, box-shadow .12s ease; }
+.chip:hover, .acts button:hover { transform: translateY(-1px); }
 
 /* wish box: same clean readable font as the answers */
 .wish input { font: 500 14px/1.3 ui-rounded, -apple-system, system-ui, sans-serif; -webkit-font-smoothing: auto; }
@@ -294,19 +291,13 @@ button { font: inherit; color: var(--ink); cursor: pointer; border: 0; }
 /* apply-fix preview: red = current line, green = fixed line */
 .acts pre.diff { flex-basis: 100%; margin: 0 0 2px; padding: 6px 8px; overflow-x: auto; white-space: pre; border-radius: 8px;
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: #1e1e2a; color: #e6e6e6; }
-.acts pre.diff .del { color: #ff8b8b; }
-.acts pre.diff .add { color: #7ef0b0; }
+.acts pre.diff .del, .acts pre.diff .add { padding: 2px 6px; border-radius: 4px; }
+.acts pre.diff .del { color: #ff8b8b; background: rgba(232, 56, 79, .16); }
+.acts pre.diff .add { color: #7ef0b0; background: rgba(47, 158, 126, .2); margin-top: 3px; }
 
-/* one-click code check, tucked under Jepi; hides while Jepi is busy or pointing at something */
-.quick { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
-  padding: 3px 9px; font: 700 12px/1.2 "Pixelify Sans", monospace; color: var(--ink); background: var(--mint); border-radius: 999px;
-  box-shadow: 0 0 0 2px var(--ink), 0 3px 0 2px var(--drop); transition: opacity .18s ease, transform .18s ease; }
-.quick:hover { transform: translateX(-50%) translateY(-1px); background: #9ff9e0; }
-.quick:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 0 0 2px var(--ink); }
-.buddy.away .quick { opacity: 0; pointer-events: none; transform: translateX(-50%) scale(.9); }
 
 /* ---------- 6-7 easter egg: number storm + party wash (only when the user triggers it) ---------- */
-.storm67 { position: fixed; z-index: 9; pointer-events: none; font: 700 1em "Pixelify Sans", monospace; -webkit-text-stroke: 2px var(--ink);
+.storm67 { position: fixed; z-index: 9; pointer-events: none; font: 800 1em var(--ui); -webkit-text-stroke: 2px var(--ink);
   animation: storm67 1.8s cubic-bezier(.2, .8, .3, 1) forwards; }
 @keyframes storm67 {
   0% { transform: scale(0) rotate(0); opacity: 0; }
@@ -327,3 +318,40 @@ body.crazy67 .spin3d { animation: revolve3d .5s linear infinite !important; }
 .lite .jepi:hover { filter: none; }
 .lite #pointer { filter: none; }
 body.lite.crazy67::before { animation: none; }
+
+/* 🎯 point & ask */
+#picker { position: fixed; inset: 0; z-index: 20; cursor: crosshair; background: rgba(20, 20, 28, .08); }
+#picker[hidden], #pickmark[hidden] { display: none; }
+#pickbox { position: absolute; display: none; border: 2px solid var(--mint); border-radius: 6px; background: rgba(111, 224, 200, .1);
+  box-shadow: 0 0 0 9999px rgba(20, 20, 28, .22); }
+.pickhint { position: fixed; top: 24px; left: 50%; transform: translateX(-50%); padding: 8px 14px; pointer-events: none;
+  font: 600 13px/1 -apple-system, system-ui, sans-serif; color: #fff; background: rgba(24, 24, 30, .9); border-radius: 999px; }
+#pickmark { position: fixed; z-index: 4; pointer-events: none; border: 2px dashed var(--mint); border-radius: 6px; }
+
+/* 🎓 study mode: calm — no aura badge or banners */
+body.serious .aura, body.serious .banner { display: none; }
+
+/* ---------- menu: plain-English list with shortcuts ---------- */
+.dock::-webkit-scrollbar { width: 4px; }
+.dock::-webkit-scrollbar-thumb { background: rgba(22, 22, 22, .2); border-radius: 4px; }
+.menu { display: flex; flex-direction: column; gap: 1px; }
+.mh { padding: 6px 10px 2px; font: 700 10.5px/1 -apple-system, system-ui, sans-serif; letter-spacing: .6px; text-transform: uppercase; color: #8a8a93; }
+.item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border-radius: 9px; text-align: left; background: transparent;
+  font: 600 13.5px/1.2 -apple-system, system-ui, "Segoe UI", sans-serif; color: var(--ink); transition: background .12s ease; }
+.item:hover, .item:focus-visible { background: #f0f1f4; }
+.item[aria-expanded="true"] { background: #fff4cf; }
+.item .ic { width: 22px; flex: none; text-align: center; font-size: 16px; }
+.item .ic.code { font: 700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--teal); }
+.item .lb { flex: 1; display: flex; flex-direction: column; }
+.item small { font: 500 11.5px/1.3 -apple-system, system-ui, sans-serif; color: #7b7b85; }
+.item kbd { flex: none; padding: 2px 6px; font: 600 10.5px/1.2 -apple-system, system-ui, sans-serif; color: #6c6c76; background: #f1f1f4;
+  border: 1px solid #e2e2e8; border-radius: 6px; }
+.item .chev { color: #a0a0aa; font-size: 18px; }
+.item.quit { color: #b4233a; }
+/* 🎯 inside the ask box */
+.aim { flex: none; width: 34px; height: 34px; font-size: 16px; background: var(--cream); border-radius: 10px; box-shadow: inset 0 0 0 2px var(--ink); }
+.aim:hover { background: #fff3c4; }
+/* tour: the current step pops, the rest fade back */
+.mark.dim { opacity: .35; animation: none; }
+
+.mtip { margin: 0 10px 4px; padding: 6px 8px; font: 500 12px/1.3 var(--ui); color: #4d4d57; background: #eefaf6; border-radius: 8px; }

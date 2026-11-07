@@ -28,18 +28,16 @@ const saveSettings = (s) => {
 
 const TEXT_EXT = /\.(py|js|jsx|ts|tsx|mjs|cjs|java|c|cc|cpp|h|hpp|cs|go|rs|rb|php|swift|kt|scala|html|css|scss|json|md|txt|sh|sql|yml|yaml|toml|vue|svelte|dart|lua|r|m)$/i;
 
-// walk the project once per lookup (skips deps/build folders, caps size so it stays fast)
-function walk(dir, out = [], depth = 0) {
+// walk the project once per lookup (skips deps/build folders, caps size). Async so the app never freezes.
+async function walk(dir, out = [], depth = 0) {
   if (depth > 7 || out.length > 4000) return out;
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
     if (e.name.startsWith('.') || SKIP.has(e.name)) continue;
     const p = path.join(dir, e.name);
-    try {
-      if (e.isDirectory()) walk(p, out, depth + 1);
-      else if (TEXT_EXT.test(e.name)) out.push(p);
-    } catch {}
+    if (e.isDirectory()) await walk(p, out, depth + 1);
+    else if (TEXT_EXT.test(e.name)) out.push(p);
   }
   return out;
 }
@@ -53,14 +51,15 @@ const cleanName = (name) => {
   return matches.length ? path.basename(matches[matches.length - 1]) : '';
 };
 
-function contains(p, find) {
+async function contains(p, find) {
   try {
-    if (fs.statSync(p).size > 600000) return false;
-    const t = fs.readFileSync(p, 'utf8');
+    if ((await fs.promises.stat(p)).size > 600000) return false;
+    const t = await fs.promises.readFile(p, 'utf8');
     const want = find.trim();
     return t.includes(find) || t.split(/\r?\n/).some((l) => l.trim() && l.trim() === want);
   } catch { return false; }
 }
+const filterAsync = async (list, fn) => (await Promise.all(list.map(fn))).reduce((acc, ok, i) => (ok ? [...acc, list[i]] : acc), []);
 
 // 1) a file you already picked with that name  2) same name in the project (case-insensitive)
 // 3) the ONE project file that actually contains the broken line  4) only then ask (and remember)
@@ -71,14 +70,14 @@ async function resolveFile(win, name, find) {
     try { if (fs.statSync(known).isFile()) return known; } catch {}
   }
 
-  const files = s.projectDir && typeof s.projectDir === 'string' && fs.existsSync(s.projectDir) ? walk(s.projectDir) : [];
+  const files = s.projectDir && typeof s.projectDir === 'string' && fs.existsSync(s.projectDir) ? await walk(s.projectDir) : [];
   const byName = files.filter((p) => path.basename(p).toLowerCase() === key);
   if (byName.length) {
-    const hits = byName.filter((p) => contains(p, find));
+    const hits = await filterAsync(byName, (p) => contains(p, find));
     return newest(hits.length ? hits : byName);
   }
 
-  const byContent = files.filter((p) => contains(p, find));
+  const byContent = await filterAsync(files, (p) => contains(p, find));
   console.log(`[fix] "${name}" → name "${base}": ${byName.length} by name, ${byContent.length} by content in ${s.projectDir || '(no folder yet)'}`);
   if (byContent.length === 1) return byContent[0];
 
@@ -147,13 +146,23 @@ async function applyFix(win, edit) {
     if (hits.length === 1) {
       target = hits[0];
       count = 1;
+      // re-indent EVERY line of a multi-line fix, keeping its own relative indentation
       const leadingIndent = target.match(/^\s*/)[0];
-      replace = leadingIndent + replace.trim();
+      const rl = replace.replace(/\r\n/g, '\n').replace(/^\n+|\s+$/g, '').split('\n');
+      const minIndent = Math.min(...rl.filter((l) => l.trim()).map((l) => l.match(/^\s*/)[0].length));
+      replace = rl.map((l) => (l.trim() ? leadingIndent + l.slice(minIndent) : '')).join(fileHasCRLF ? '\r\n' : '\n');
     }
   }
 
   if (count === 0) return { error: `couldn't find that exact line in ${path.basename(p)}` };
   if (count > 1) return { error: `that text appears ${count}× in ${path.basename(p)}, so i won't guess` };
+
+  // a multi-line fix dropped into the middle of an indented line (screen text often loses indentation):
+  // indent the fix's following lines to match that line, so Python/YAML/etc. stay valid
+  const at = text.indexOf(target), lineStart = text.lastIndexOf('\n', at - 1) + 1, prefix = text.slice(lineStart, at);
+  if (replace.includes('\n') && prefix && /^[ \t]*$/.test(prefix)) {
+    replace = replace.split(/\r?\n/).map((l, i) => (i && l.trim() ? prefix + l : l)).join(fileHasCRLF ? '\r\n' : '\n');
+  }
 
   const after = text.replace(target, () => replace);
   try {

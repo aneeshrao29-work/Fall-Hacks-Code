@@ -1,10 +1,14 @@
 // Jepi's content: personas, wardrobe, canned lines, the offline demo, and 8-bit sound effects.
 const THINKING = ['hold up lemme cook… 🍳', 'scanning ur screen… no cap 🔍', 'analyzing the vibes…', 'loading rizz.exe…', 'chat is this real… checking 🧐'];
 const TIPS = [
-  'tip 1/3 ✨ press ⌘⇧Space and i\'ll fly to whatever\'s wrong on your screen',
-  'tip 2/3 💬 press ⌘⇧A to make a wish (ask me anything about your screen)',
-  'tip 3/3 👆 click me for modes, personas + outfits. double-click to poke. drag me anywhere.',
+  'tip 1/3 ✨ double-tap me to check your code · ⌘⇧Space = i look for what\'s wrong anywhere on screen',
+  'tip 2/3 💬 ⌘⇧A to ask me anything · 🎯 in my menu lets you box exactly what to ask about',
+  'tip 3/3 👆 tap me once for the menu · twice = check all my code · three times = poke. drag me anywhere.',
 ];
+const PERSONA_NAMES = { bestie: 'Gen Z bestie', brainrot: 'Brainrot', linkedin: 'LinkedIn bro', drama: 'Drama queen',
+  cat: 'Cat', grandma: 'Cyber grandma', study: 'Study (serious)' };
+const STUDY_THINKING = ['reading your screen…', 'one sec, looking…', 'thinking it through…'];
+const AURA_INFO = 'aura ✦ = your focus score. every time i look, i rate your screen from -67 to +67: studying or coding = plus, doomscrolling or games = minus. it adds up over the session. just for fun 🙂';
 
 const WARDROBE = {
   hat: { none: '🚫 none', cap: '🧢 cap', crown: '👑 crown', propeller: '🌀 propeller', wizard: '🧙 wizard', cowboy: '🤠 yeehaw',
@@ -32,6 +36,9 @@ const PERSONAS = {
   grandma: { emoji: '👵', outfit: { hat: 'beanie', face: 'glasses', fit: 'scarf', trail: 'crumbs' },
     hello: 'hello sweetie 👵 grandma baked herself a pie! drink some water, dear.',
     pokes: ['oh! you startled grandma 😳', 'that\'s very skibidi of you, dear', 'poke me again and no cookies 🍪'] },
+  study: { emoji: '🎓', serious: true, outfit: { hat: 'none', face: 'glasses', fit: 'none', trail: 'none' },
+    hello: 'study mode 🎓 calm and focused. ask me about anything on your screen.',
+    pokes: ['still here. what are you working on?', 'focus mode is on 📚', 'one thing at a time.'] },
 };
 
 // ⌘⌥D: a canned, network-free result so the live demo survives bad Wi-Fi.
@@ -53,8 +60,26 @@ const SFX = {
   jackpot: [[523, 523, 0.07], [659, 659, 0.07], [784, 784, 0.07], [1047, 1047, 0.07], [784, 784, 0.07], [1047, 1047, 0.07], [1319, 1319, 0.3]], yeet: [[900, 140, 0.4]], bonk: [[160, 90, 0.2]], copy: [[660, 660, 0.06], [990, 990, 0.1]],
   snore: [[140, 110, 0.5]],
 };
+// chiptune "voice": tiny blips while Jepi types, pitched per persona (study mode stays silent)
+const VOICE = { bestie: 900, brainrot: 1250, linkedin: 520, drama: 700, cat: 1350, grandma: 440 };
+function blip(ch) {
+  const base = VOICE[persona];
+  if (muted || !base || !/[a-z]/i.test(ch) || document.body.classList.contains('serious')) return;
+  try {
+    audioCtx ||= new AudioContext();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {}); // autoplay policy: wake it like sfx() does
+    const t = audioCtx.currentTime + 0.001, o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(base + ('aeiou'.includes(ch.toLowerCase()) ? 120 : 0) + (ch.charCodeAt(0) % 5) * 25, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.03, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.035);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t); o.stop(t + 0.04);
+  } catch {}
+}
 function sfx(name) {
-  if (muted || !SFX[name]) return;
+  if (muted || !SFX[name] || document.body.classList.contains('serious')) return; // study mode is silent
   try {
     audioCtx ||= new AudioContext();
     if (audioCtx.state === 'suspended') {
@@ -66,7 +91,8 @@ function sfx(name) {
       o.type = 'square';
       o.frequency.setValueAtTime(Math.max(20, f0), t);
       o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-      g.gain.setValueAtTime(0.05, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.05, t + 0.005); // fade in: no speaker pop
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g).connect(audioCtx.destination);
       o.start(t); o.stop(t + dur);
