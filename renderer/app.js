@@ -6,6 +6,10 @@ const MAC = api.platform === 'darwin';
 const keys = (t) => (MAC ? t : t.replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘⌥/g, 'Ctrl+Alt+').replace(/⌘/g, 'Ctrl+'));
 const buddy = $('#buddy'), jepi = $('#jepi'), sprite = $('#sprite'), bubble = $('#bubble'), caption = $('#caption');
 const input = $('#question'), dock = $('#dock'), wish = $('#askForm');
+// older/weaker machines get 'lite' mode: no decorative idle animations, fewer particles
+const LITE = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4
+  || matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.body.classList.toggle('lite', LITE);
 const W = 66, H = 71; // Jepi is drawn at 88x94 and scaled to 75%
 let hushTimer = null, mode = 'help', busy = false, aura = 0, watchTimer = null, moodTimer = null, typeTimer = null, dismissTimer = null;
 let flightId = 0, pos = { x: 0, y: 0 }, home = null, parked = false, hovering = 0, hidden = false;
@@ -60,7 +64,7 @@ function say(text, cls = '', ttl = 9000, actions = [], diff = null) {
   let i = 0;
   typeTimer = setInterval(() => {
     caption.textContent += chars[i++] ?? '';
-    fixBubble();
+    if (i % 8 === 0 || i >= chars.length) fixBubble(); // layout reads are costly: not every char
     if (i >= chars.length) {
       clearInterval(typeTimer);
       jepi.classList.remove('talking');
@@ -94,20 +98,6 @@ function addAura(n) {
   else if (aura <= -67) banner(`YOU'RE COOKED 💀 ${aura}`);
   else if (Math.abs(n) >= 30) banner(`${n > 0 ? '+' : ''}${n} aura ${n > 0 ? '✨' : '📉'}`);
 }
-function boom67() {
-  setMood('sixseven', 3500);
-  banner('6 7 🤲🤲');
-  for (let i = 0; i < 24; i++) {
-    const s = document.createElement('span');
-    s.className = 'float67';
-    s.textContent = pick(['6', '7', '67', '🤲', '6-7']);
-    Object.assign(s.style, { left: Math.random() * 95 + 'vw', top: 50 + Math.random() * 45 + 'vh', animationDelay: Math.random() * 0.6 + 's',
-      color: pick(['#2f9e7e', '#8fd0dc', '#f0717f', '#e8384f', '#f7c948', '#1a1a9a']) });
-    s.style.setProperty('--r', Math.random() * 60 - 30 + 'deg');
-    document.body.append(s);
-    setTimeout(() => s.remove(), 2800);
-  }
-}
 
 // ---------- movement + trail ----------
 function fixBubble() {
@@ -126,7 +116,7 @@ function place(x, y) {
 let rainbowHue = 0;
 function trail(x, y) {
   const t = outfit.trail;
-  if (t === 'none') return;
+  if (t === 'none' || (LITE && Math.random() < 0.5)) return;
   const p = document.createElement('div');
   p.className = 'particle';
   if (t === 'crumbs') {
@@ -140,11 +130,11 @@ function trail(x, y) {
   $('#fx').append(p);
   setTimeout(() => p.remove(), 1000);
 }
-function flyTo(tx, ty) {
+function flyTo(tx, ty, maxDur = 1400) {
   tx = clamp(tx, 6, innerWidth - W - 6);
   ty = clamp(ty, 6, innerHeight - H - 6);
   return new Promise((done) => {
-    const sx = pos.x, sy = pos.y, dist = Math.hypot(tx - sx, ty - sy), dur = Math.min(1400, 450 + dist * 0.9);
+    const sx = pos.x, sy = pos.y, dist = Math.hypot(tx - sx, ty - sy), dur = Math.min(maxDur, 450 + dist * 0.9);
     if (dist < 4) { place(tx, ty); return done(); }
     const t0 = performance.now();
     let lastP = 0;
@@ -293,6 +283,7 @@ async function look(question = '', m = mode === 'watch' ? 'help' : mode, context
 // show an answer: fly, pin, point, caption + buttons
 async function present(res, question = '') {
   addAura(res.aura);
+  if (res.screenChanged) res.reply += '\n(you switched screens while i was thinking, so no pins 👀)';
   if (res.targets?.length) {
     say('on my way 💨');
     sfx('whoosh');
@@ -311,7 +302,6 @@ async function present(res, question = '') {
   actions.push(['🧒 eli5', () => look('explain that like I\'m 5, in one short sentence', 'help', lastReply)]);
   actions.push(['↩ ask more', () => { followUp = true; openWish(); }]);
   say(res.reply + (res.tip ? `\n⚡ ${res.tip}` : ''), '', 15000, actions);
-  if (/6\s*-?\s*7|six\s*seven/i.test(res.reply + question)) boom67();
   dismissTimer = setTimeout(goHome, mode === 'watch' ? 12000 : 15000);
 }
 function setWatch(on) {
@@ -409,7 +399,7 @@ $('#askForm').onsubmit = (e) => {
   const ctx = followUp ? lastReply : '';
   followUp = false;
   closeWish();
-  if (/^6\s*-?\s*7$/.test(q)) { boom67(); return say('SIX SEVENNNN 🤲🤲 ok that was mid but i respect it'); }
+  if (/^\s*(6\s*[-.,]?\s*7|six\s*-?\s*seven|sixty\s*-?\s*seven)\s*[!?.🤲]*\s*$/i.test(q)) return go67(); // the easter egg
   if (q) look(q, mode === 'watch' ? 'help' : mode, ctx);
 };
 
@@ -471,14 +461,20 @@ api.onHotkey(async (k) => {
 let lastKey = '', lastAt = 0;
 document.addEventListener('keydown', (e) => {
   if (e.target === input) return;
-  if (e.key === '7' && lastKey === '6' && Date.now() - lastAt < 1200) { boom67(); say('6-7 🤲🤲 who taught you that'); }
+  if (e.key === '7' && lastKey === '6' && Date.now() - lastAt < 1200) go67();
   lastKey = e.key; lastAt = Date.now();
 });
 
 // eyes follow the cursor across the whole screen (1 pixel each way, 8-bit style)
-document.addEventListener('mousemove', (e) => {
-  const dx = Math.sign(Math.round((e.clientX - (pos.x + W / 2)) / 80)), dy = Math.sign(Math.round((e.clientY - (pos.y + H * 0.35)) / 80));
-  document.querySelectorAll('.pupil').forEach((p) => (p.style.transform = `translate(${dx}px, ${dy}px)`));
+const pupils = [...document.querySelectorAll('.pupil')];
+let eyeFrame = 0;
+document.addEventListener('mousemove', (e) => { // eyes follow the cursor, at most once per frame
+  if (eyeFrame) return;
+  eyeFrame = requestAnimationFrame(() => {
+    eyeFrame = 0;
+    const dx = Math.sign(Math.round((e.clientX - (pos.x + W / 2)) / 80)), dy = Math.sign(Math.round((e.clientY - (pos.y + H * 0.35)) / 80));
+    for (const p of pupils) p.style.transform = `translate(${dx}px, ${dy}px)`;
+  });
 });
 
 // overlay hopped to another monitor (or resized): re-home Jepi in that screen's corner

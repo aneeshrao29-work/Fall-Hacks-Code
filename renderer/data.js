@@ -16,10 +16,10 @@ const WARDROBE = {
 const PERSONAS = {
   bestie: { emoji: '💅', outfit: { hat: 'bow', face: 'blushy', fit: 'none', trail: 'crumbs' },
     hello: 'gen z bestie mode 💅 your hype girl AND your debugger. slay.',
-    pokes: ['bro stop poking me 💀', 'that tickles, twin 😭', 'touch grass, not me', 'ok that one was kinda rizz ngl', '6-7 🤲🤲'] },
-  brainrot: { emoji: '🧠', outfit: { hat: 'propeller', face: 'shades', fit: 'none', trail: 'six7' },
-    hello: 'erm what the sigma 🧠 brainrot mode ON. skibidi ohio fanum tax 6-7.',
-    pokes: ['stop poking or i\'m fanum taxing your cursor 🍟', '-67 aura poke detected', 'chat he poked me. chat.'] },
+    pokes: ['bro stop poking me 💀', 'that tickles, twin 😭', 'touch grass, not me', 'ok that one was kinda rizz ngl', 'personal space, twin 🫸'] },
+  brainrot: { emoji: '🧠', outfit: { hat: 'propeller', face: 'shades', fit: 'none', trail: 'rainbow' },
+    hello: 'erm what the sigma 🧠 brainrot mode ON. skibidi ohio fanum tax.',
+    pokes: ['stop poking or i\'m fanum taxing your cursor 🍟', '-10 aura poke detected', 'chat he poked me. chat.'] },
   linkedin: { emoji: '💼', outfit: { hat: 'none', face: 'shades', fit: 'tie', trail: 'coins' },
     hello: 'I\'m thrilled to announce I\'m your new sidekick 🚀 Agree? #Grindset',
     pokes: ['A poke is just unsolicited networking. 🤝', 'Let\'s take this poke offline.', 'Open to work. Not to pokes. #Boundaries'] },
@@ -49,7 +49,8 @@ const DEMO = {
 let audioCtx = null, muted = false;
 const SFX = {
   scan: [[220, 880, 0.35]], ding: [[988, 988, 0.08], [1319, 1319, 0.16]], whoosh: [[600, 180, 0.25]],
-  pop: [[520, 900, 0.08]], yeet: [[900, 140, 0.4]], bonk: [[160, 90, 0.2]], copy: [[660, 660, 0.06], [990, 990, 0.1]],
+  pop: [[520, 900, 0.08]],
+  jackpot: [[523, 523, 0.07], [659, 659, 0.07], [784, 784, 0.07], [1047, 1047, 0.07], [784, 784, 0.07], [1047, 1047, 0.07], [1319, 1319, 0.3]], yeet: [[900, 140, 0.4]], bonk: [[160, 90, 0.2]], copy: [[660, 660, 0.06], [990, 990, 0.1]],
   snore: [[140, 110, 0.5]],
 };
 function sfx(name) {

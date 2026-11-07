@@ -24,6 +24,7 @@ cp .env.example .env      # then paste your key from https://aistudio.google.com
 npm start
 ```
 macOS: first run asks for **Screen Recording** permission → allow it, then quit (⌘⇧Q) and `npm start` again.
+**Windows step-by-step (incl. installing npm):** see [`docs/WINDOWS.md`](WINDOWS.md).
 **Windows / Linux:** same steps; every ⌘ shortcut is **Ctrl** instead (Ctrl+Shift+Space, Ctrl+Shift+A, …) and Jepi's captions say so automatically.
 Linux needs a compositing desktop (GNOME/KDE on X11 works best); on Wayland the system may ask to approve each screen capture.
 Emoji need an emoji font on Linux (`sudo apt install fonts-noto-color-emoji`).

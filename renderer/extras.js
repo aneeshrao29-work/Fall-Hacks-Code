@@ -68,6 +68,43 @@ api.onCursor(({ x, y }) => {
   if (inside !== overUI) { overUI = inside; hovering = inside ? 1 : 0; if (document.activeElement !== input) api.clickThrough(!inside); }
   document.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y }));
 });
+// 6-7 🤲 — ONLY when the user types/presses it. Then it goes fully unhinged for a few seconds.
+let going67 = false;
+async function go67() {
+  if (going67 || busy) return;
+  going67 = tipsOff = true;
+  closeMenu(); closeWish(); clearMarks(); jepi.classList.remove('pointL', 'pointR'); parked = false;
+  sfx('jackpot');
+  banner('6 7 🤲🤲');
+  setMood('sixseven');
+  say(pick(['SIX SEVENNNN 🤲🤲', '6️⃣7️⃣ IT\'S HAPPENING', 'chat. CHAT. 6 7 🤲', 'ok who said it 😭🤲']), '', 5000);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { going67 = false; return setTimeout(() => setMood('idle'), 2000); }
+  document.body.classList.add('crazy67');
+  buddy.classList.add('away');
+  for (let i = 0; i < (LITE ? 35 : 90); i++) setTimeout(() => { // full-screen number storm
+    const s = document.createElement('span');
+    s.className = 'storm67';
+    s.textContent = pick(['6', '7', '67', '6-7', '🤲', '6', '7']);
+    Object.assign(s.style, {
+      left: Math.random() * 100 + 'vw', top: Math.random() * 100 + 'vh', fontSize: 28 + Math.random() * 110 + 'px',
+      color: pick(['#2f9e7e', '#8fd0dc', '#f0717f', '#e8384f', '#f7c948', '#6fe0c8', '#fff']),
+    });
+    s.style.setProperty('--r', Math.random() * 720 - 360 + 'deg');
+    s.style.setProperty('--dx', Math.random() * 200 - 100 + 'px');
+    document.body.append(s);
+    setTimeout(() => s.remove(), 1900);
+  }, i * 40);
+  const start = { ...pos }, keep = outfit.trail;
+  outfit.trail = 'six7'; // zig-zag around the screen leaving 6s and 7s
+  for (let k = 0; k < 6; k++) await flyTo(Math.random() * (innerWidth - W), Math.random() * (innerHeight - H), 420);
+  await flyTo(start.x, start.y, 600);
+  outfit.trail = keep;
+  document.body.classList.remove('crazy67');
+  buddy.classList.remove('away');
+  setMood('hype', 1500);
+  going67 = false;
+}
+
 // 🐞 one-click code check
 $('#quickBtn').onclick = (e) => { e.stopPropagation(); closeMenu(); look('', 'code'); };
 
