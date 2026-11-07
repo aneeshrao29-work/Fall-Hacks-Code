@@ -1,0 +1,14 @@
+{
+  "name": "jepi-the-genie",
+  "productName": "JepiTheGenie",
+  "version": "1.0.0",
+  "description": "JepiTheGenie: a sassy pixel genie hovering AI sidekick that watches your screen and pinpoints what's wrong",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}

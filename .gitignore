@@ -1,0 +1,30 @@
+# secrets — never commit API keys (copy .env.example → .env)
+.env
+.env.*
+!.env.example
+
+# dependencies & build output
+node_modules/
+dist/
+out/
+build/
+__pycache__/
+*.pyc
+
+# logs & temp
+*.log
+npm-debug.log*
+*.bak
+*.tmp
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude/
+
+# local AI tooling state
+.claude-flow/
+.swarm/
+ruvector.db

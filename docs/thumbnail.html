@@ -1,0 +1,136 @@
+<!doctype html>
+<!-- Devpost thumbnail (3:2). Uses the real Jepi sprite from renderer/sprite.js. Render: see docs/render-thumbnail.js -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Jepi thumbnail</title>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #161616; --cream: #fdf9ef; --teal: #2f9e7e; --green: #5aa994; --sky: #8fd0dc; --mint: #6fe0c8;
+    --pink: #f0717f; --red: #e8384f; --navy: #1a1a9a; --gold: #f7c948; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1500px; height: 1000px; overflow: hidden; }
+  body { position: relative; font-family: "Pixelify Sans", monospace; color: var(--ink);
+    background: radial-gradient(circle, rgba(22,22,22,.13) 2px, transparent 2.5px) 0 0 / 30px 30px, var(--cream); }
+  svg { shape-rendering: crispEdges; }
+  .abs { position: absolute; }
+  .card { background: #fff; border: 6px solid var(--ink); box-shadow: 12px 12px 0 var(--ink); }
+
+  /* corner color blocks */
+  .blk { position: absolute; border: 6px solid var(--ink); }
+
+  /* ---- title ---- */
+  .eyebrow { left: 70px; top: 64px; padding: 8px 16px; font-size: 26px; font-weight: 700; background: var(--gold);
+    border: 5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); transform: rotate(-3deg); }
+  .title { left: 56px; top: 118px; font-size: 270px; font-weight: 700; line-height: 1; letter-spacing: 4px;
+    -webkit-text-stroke: 14px var(--ink); paint-order: stroke fill; text-shadow: 12px 12px 0 var(--ink); }
+  .title span:nth-child(1) { color: var(--green); } .title span:nth-child(2) { color: var(--sky); }
+  .title span:nth-child(3) { color: var(--pink); } .title span:nth-child(4) { color: var(--gold); }
+  .genie { left: 470px; top: 150px; padding: 6px 14px; font-size: 34px; font-weight: 700; color: #fff; background: var(--navy);
+    border: 5px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); transform: rotate(8deg); }
+  .sub { left: 74px; top: 438px; font-size: 52px; font-weight: 700; line-height: 1.05; }
+  .sub mark { background: var(--mint); padding: 0 8px; border: 4px solid var(--ink); }
+  .keys { left: 74px; top: 580px; display: flex; align-items: center; gap: 12px; font-size: 30px; font-weight: 700; }
+  .key { min-width: 64px; height: 64px; padding: 0 14px; display: grid; place-items: center; font-family: system-ui, sans-serif;
+    font-size: 30px; font-weight: 800; background: #fff; border: 5px solid var(--ink); border-radius: 10px; box-shadow: 0 7px 0 var(--ink); }
+  .key.wide { min-width: 150px; font-size: 24px; }
+
+  /* ---- code window ---- */
+  .win { left: 760px; top: 70px; width: 690px; height: 560px; transform: rotate(1.5deg); }
+  .bar { height: 54px; display: flex; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 6px solid var(--ink); background: var(--sky); }
+  .dot { width: 20px; height: 20px; border: 4px solid var(--ink); border-radius: 50%; }
+  .bar b { margin-left: 10px; font-size: 26px; }
+  .code { height: calc(100% - 54px); padding: 24px 0; background: #1e1f3b; font: 500 25px/43px "JetBrains Mono", monospace; color: #f3eedc; position: relative; }
+  .ln { white-space: pre; }
+  .ln i { display: inline-block; width: 64px; padding-right: 18px; text-align: right; font-style: normal; color: #5f6396; }
+  .k { color: #ff8fa0; } .s { color: var(--mint); } .f { color: var(--gold); } .c { color: #8a8fc0; }
+  /* the pinpoint frame (same look as the app's .mark) */
+  .pin { left: 72px; top: 239px; width: 590px; height: 52px; border: 6px solid var(--red); box-shadow: 0 0 0 4px var(--ink), inset 0 0 0 3px var(--ink);
+    background: rgba(232, 56, 79, .18); }
+  .pin::before, .pin::after { content: ""; position: absolute; width: 16px; height: 16px; background: var(--red); border: 3px solid var(--ink); }
+  .pin::before { left: -15px; top: -15px; } .pin::after { right: -15px; bottom: -15px; }
+  .tag { right: -28px; top: -50px; padding: 2px 12px; font: 700 26px "Pixelify Sans"; color: #fff; background: var(--red);
+    border: 4px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: rotate(-4deg); white-space: nowrap; }
+
+  /* ---- jepi ---- */
+  .jepi { left: 600px; top: 600px; width: 352px; height: 376px; }
+  .jepi svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .wear, #tear, #lids, .mouth, .prop { display: none; }
+  .mouth.m-smirk { display: inline; }
+  .aura { left: 905px; top: 590px; padding: 4px 12px; font-size: 30px; font-weight: 700; background: #fff; border: 5px solid var(--ink);
+    box-shadow: 5px 5px 0 var(--ink); transform: rotate(6deg); }
+  .aura b { color: var(--teal); }
+
+  /* ---- speech bubble ---- */
+  .bubble { left: 74px; top: 720px; width: 500px; padding: 18px 22px; font: 600 30px/1.3 ui-rounded, -apple-system, system-ui, sans-serif; }
+  .cc { display: inline-block; margin-right: 8px; padding: 0 8px; font: 800 20px/30px system-ui, sans-serif; color: #fff; background: var(--ink); vertical-align: 4px; }
+  .bubble code { font: 700 28px "JetBrains Mono", monospace; background: var(--gold); padding: 0 6px; border: 3px solid var(--ink); }
+  /* stair-stepped tail pointing right at Jepi */
+  .tail { right: -38px; top: 70px; width: 38px; height: 34px; background: var(--ink);
+    clip-path: polygon(0 0, 100% 0, 100% 25%, 75% 25%, 75% 50%, 50% 50%, 50% 75%, 25% 75%, 25% 100%, 0 100%); }
+  .tail::after { content: ""; position: absolute; left: 0; top: 6px; width: 22px; height: 20px; background: #fff;
+    clip-path: polygon(0 0, 100% 0, 100% 33%, 66% 33%, 66% 66%, 33% 66%, 33% 100%, 0 100%); }
+
+  .chip { padding: 6px 16px; font-size: 26px; font-weight: 700; border: 5px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); }
+  .px { position: absolute; }
+</style>
+</head>
+<body>
+  <div class="blk" style="right:-60px; bottom:-60px; width:440px; height:330px; background:var(--pink); transform:rotate(-8deg)"></div>
+  <div class="blk" style="left:-90px; bottom:-120px; width:300px; height:260px; background:var(--sky); transform:rotate(12deg)"></div>
+
+  <div class="abs eyebrow">FALL HACKS 2026 · digital sidekick</div>
+  <div class="abs title"><span>j</span><span>e</span><span>p</span><span>i</span></div>
+  <div class="abs genie">the genie ✨</div>
+  <div class="abs sub">your <mark>sassy</mark> screen<br>sidekick</div>
+  <div class="abs keys"><span class="key">⌘</span>+<span class="key">⇧</span>+<span class="key wide">space</span><span style="margin-left:8px">→ bug found.</span></div>
+
+  <div class="abs card win">
+    <div class="bar"><span class="dot" style="background:var(--red)"></span><span class="dot" style="background:var(--gold)"></span><span class="dot" style="background:var(--mint)"></span><b>summon.js</b></div>
+    <div class="code">
+      <div class="ln"><i>1</i><span class="c">// summon the genie 🍒</span></div>
+      <div class="ln"><i>2</i><span class="k">import</span> { pie } <span class="k">from</span> <span class="s">"./cherry.js"</span>;</div>
+      <div class="ln"><i>3</i> </div>
+      <div class="ln"><i>4</i><span class="k">function</span> <span class="f">summon</span>(wish) {</div>
+      <div class="ln"><i>5</i>  <span class="k">const</span> jepi = pie.<span class="f">open</span>();</div>
+      <div class="ln"><i>6</i>  <span class="k">const</span> vibes = [<span class="s">"sassy"</span>, <span class="s">"6-7"</span>;</div>
+      <div class="ln"><i>7</i>  jepi.<span class="f">fly</span>(vibes);</div>
+      <div class="ln"><i>8</i>  <span class="k">return</span> jepi.<span class="f">grant</span>(wish);</div>
+      <div class="ln"><i>9</i>}</div>
+      <div class="abs pin"><span class="abs tag">missing ] !!</span></div>
+    </div>
+  </div>
+
+  <!-- dashed arrow from Jepi's hand to the bug -->
+  <svg class="abs" style="left:0; top:0; width:1500px; height:1000px; overflow:visible; shape-rendering:auto" viewBox="0 0 1500 1000">
+    <defs><marker id="head" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#e8384f" stroke="#161616" stroke-width="1.6" stroke-linejoin="round"/></marker></defs>
+    <path d="M948 842 C 1180 860, 1300 720, 1290 452" fill="none" stroke="#161616" stroke-width="18" stroke-linecap="round" stroke-dasharray="1 30"/>
+    <path d="M948 842 C 1180 860, 1300 720, 1290 452" fill="none" stroke="#e8384f" stroke-width="10" stroke-linecap="round" stroke-dasharray="22 18" marker-end="url(#head)"/>
+  </svg>
+
+  <div class="abs card bubble"><span class="cc">CC</span>twin your code is <b>lowkey cooked</b> 💀 line 6 is missing a <code>]</code> no cap<span class="abs tail"></span></div>
+
+  <div class="abs jepi"><svg id="sprite"></svg><svg id="pie"></svg></div>
+  <div class="abs aura">✦ <b>+67</b> aura</div>
+
+  <div class="abs chip" style="left:1060px; top:900px; background:#fff; transform:rotate(-3deg)">built with Gemini</div>
+
+  <script src="../renderer/sprite.js"></script>
+  <script>
+    const s = document.getElementById('sprite');
+    buildTwin(s); buildPie(document.getElementById('pie'));
+    wear(s, 'hat', 'crown'); wear(s, 'face', 'blushy');
+    // pixel confetti: flight trail behind Jepi + sparkles around the scene
+    const put = (art, x, y, scale, rot = 0) => {
+      const el = miniSprite(TRAIL_ART[art], scale);
+      el.classList.add('px'); el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.transform = `rotate(${rot}deg)`;
+      document.body.append(el);
+    };
+    [['hearts', 560, 560, 5], ['sparkles', 690, 425, 6], ['stars', 470, 395, 5, 10], ['coins', 700, 520, 6],
+     ['sparkles', 690, 60, 7], ['stars', 1420, 680, 7, -12], ['hearts', 1390, 20, 6, 8], ['sparkles', 980, 690, 5],
+     ['coins', 60, 640, 5], ['stars', 640, 280, 6]].forEach((a) => put(...a));
+    document.fonts.ready.then(() => document.body.dataset.ready = '1');
+  </script>
+</body>
+</html>
