@@ -57,12 +57,15 @@ function sfx(name) {
   if (muted || !SFX[name]) return;
   try {
     audioCtx ||= new AudioContext();
-    let t = audioCtx.currentTime;
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    let t = Math.max(audioCtx.currentTime, 0.001);
     for (const [f0, f1, dur] of SFX[name]) {
       const o = audioCtx.createOscillator(), g = audioCtx.createGain();
       o.type = 'square';
-      o.frequency.setValueAtTime(f0, t);
-      o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+      o.frequency.setValueAtTime(Math.max(20, f0), t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
       g.gain.setValueAtTime(0.05, t);
       g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g).connect(audioCtx.destination);

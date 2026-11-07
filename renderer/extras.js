@@ -63,7 +63,7 @@ document.addEventListener('keydown', (e) => { // Esc closes everything
 
 // Linux: no forwarded mouse moves, so main streams the cursor; toggle click-through + eye-follow from it
 let overUI = false;
-api.onCursor(({ x, y }) => {
+api.onCursor?.(({ x = 0, y = 0 } = {}) => {
   const inside = !!document.elementFromPoint(x, y)?.closest('#buddy, #dock, #askForm');
   if (inside !== overUI) { overUI = inside; hovering = inside ? 1 : 0; if (document.activeElement !== input) api.clickThrough(!inside); }
   document.dispatchEvent(new MouseEvent('mousemove', { clientX: x, clientY: y }));

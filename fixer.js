@@ -4,10 +4,27 @@ const fs = require('fs');
 const path = require('path');
 const { app, dialog } = require('electron');
 
-const SKIP = new Set(['node_modules', 'dist', 'build', 'venv', '.venv', '__pycache__', 'target', '.git']);
+const SKIP = new Set(['node_modules', 'dist', 'build', 'venv', '.venv', '__pycache__', 'target', '.git', '.claude-flow', '.swarm']);
 const settingsFile = () => path.join(app.getPath('userData'), 'jepi-settings.json');
-const loadSettings = () => { try { return JSON.parse(fs.readFileSync(settingsFile(), 'utf8')); } catch { return {}; } };
-const saveSettings = (s) => fs.writeFileSync(settingsFile(), JSON.stringify(s));
+
+const loadSettings = () => {
+  try {
+    const data = JSON.parse(fs.readFileSync(settingsFile(), 'utf8'));
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveSettings = (s) => {
+  try {
+    const dir = app.getPath('userData');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(settingsFile(), JSON.stringify(s, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[fixer] failed to save settings:', err.message);
+  }
+};
 
 const TEXT_EXT = /\.(py|js|jsx|ts|tsx|mjs|cjs|java|c|cc|cpp|h|hpp|cs|go|rs|rb|php|swift|kt|scala|html|css|scss|json|md|txt|sh|sql|yml|yaml|toml|vue|svelte|dart|lua|r|m)$/i;
 
@@ -19,19 +36,29 @@ function walk(dir, out = [], depth = 0) {
   for (const e of entries) {
     if (e.name.startsWith('.') || SKIP.has(e.name)) continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, out, depth + 1);
-    else if (TEXT_EXT.test(e.name)) out.push(p);
+    try {
+      if (e.isDirectory()) walk(p, out, depth + 1);
+      else if (TEXT_EXT.test(e.name)) out.push(p);
+    } catch {}
   }
   return out;
 }
-const newest = (list) => list.sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+
+const safeMtime = (p) => { try { return fs.statSync(p).mtimeMs; } catch { return 0; } };
+const newest = (list) => list.slice().sort((a, b) => safeMtime(b) - safeMtime(a))[0];
+
 // "demo.py — Visual Studio Code", "● app.js", "src/App.tsx" → "demo.py" / "app.js" / "App.tsx"
-const cleanName = (name) => (String(name || '').match(/[\w.@-]+\.[A-Za-z0-9]{1,6}/g) || []).map((n) => path.basename(n)).pop() || '';
+const cleanName = (name) => {
+  const matches = String(name || '').match(/[\w.@-]+\.[A-Za-z0-9]{1,6}/g) || [];
+  return matches.length ? path.basename(matches[matches.length - 1]) : '';
+};
+
 function contains(p, find) {
   try {
     if (fs.statSync(p).size > 600000) return false;
     const t = fs.readFileSync(p, 'utf8');
-    return t.includes(find) || t.split('\n').some((l) => l.trim() && l.trim() === find.trim());
+    const want = find.trim();
+    return t.includes(find) || t.split(/\r?\n/).some((l) => l.trim() && l.trim() === want);
   } catch { return false; }
 }
 
@@ -39,43 +66,102 @@ function contains(p, find) {
 // 3) the ONE project file that actually contains the broken line  4) only then ask (and remember)
 async function resolveFile(win, name, find) {
   const s = loadSettings(), base = cleanName(name), key = base.toLowerCase();
-  const known = (s.files || {})[key];
-  if (known && fs.existsSync(known)) return known;
-  const files = s.projectDir ? walk(s.projectDir) : [];
+  const known = s.files && Object.prototype.hasOwnProperty.call(s.files, key) ? s.files[key] : null;
+  if (known && typeof known === 'string' && fs.existsSync(known)) {
+    try { if (fs.statSync(known).isFile()) return known; } catch {}
+  }
+
+  const files = s.projectDir && typeof s.projectDir === 'string' && fs.existsSync(s.projectDir) ? walk(s.projectDir) : [];
   const byName = files.filter((p) => path.basename(p).toLowerCase() === key);
-  if (byName.length) return newest(byName.filter((p) => contains(p, find)).length ? byName.filter((p) => contains(p, find)) : byName);
+  if (byName.length) {
+    const hits = byName.filter((p) => contains(p, find));
+    return newest(hits.length ? hits : byName);
+  }
+
   const byContent = files.filter((p) => contains(p, find));
   console.log(`[fix] "${name}" → name "${base}": ${byName.length} by name, ${byContent.length} by content in ${s.projectDir || '(no folder yet)'}`);
   if (byContent.length === 1) return byContent[0];
+
   const r = await dialog.showOpenDialog(win, {
     title: `Which file is ${base || 'this'}? (Jepi will remember it)`,
-    defaultPath: s.projectDir, properties: ['openFile'],
+    defaultPath: s.projectDir,
+    properties: ['openFile'],
   });
   if (r.canceled || !r.filePaths[0]) return null;
   const picked = r.filePaths[0];
-  saveSettings({ ...s, projectDir: s.projectDir && picked.startsWith(s.projectDir) ? s.projectDir : path.dirname(picked),
-    files: { ...(s.files || {}), [key || path.basename(picked).toLowerCase()]: picked } });
+
+  const updatedFiles = Object.assign(Object.create(null), s.files || {});
+  const fileKey = key || path.basename(picked).toLowerCase();
+  if (fileKey) updatedFiles[fileKey] = picked;
+
+  saveSettings({
+    ...s,
+    projectDir: s.projectDir && picked.startsWith(s.projectDir) ? s.projectDir : path.dirname(picked),
+    files: updatedFiles,
+  });
   return picked;
 }
 
 let lastEdit = null;
-async function applyFix(win, { file, find, replace }) {
+
+async function applyFix(win, edit) {
+  const rawFile = String(edit?.file || '');
+  let find = String(edit?.find || '');
+  let replace = String(edit?.replace || '');
+
   if (!find || find === replace) return { error: 'nothing to change' };
-  const p = await resolveFile(win, file, find);
+
+  const p = await resolveFile(win, rawFile, find);
   if (!p) return { error: 'no file picked' };
-  const text = fs.readFileSync(p, 'utf8');
-  // fix already applied? (e.g. find is a prefix of replace) — don't apply it twice
-  if (replace.includes(find) && text.includes(replace)) return { error: `${path.basename(p)} already has that fix 👍` };
-  let target = find, count = text.split(find).length - 1;
-  if (count === 0) { // the screen may show different whitespace: fall back to a unique trimmed-line match
-    const want = find.trim(), lines = text.split('\n');
-    const hits = lines.filter((l) => l.trim() === want);
-    if (hits.length === 1) { target = hits[0]; count = 1; replace = target.match(/^\s*/)[0] + replace.trim(); }
+
+  let text;
+  try {
+    text = fs.readFileSync(p, 'utf8');
+  } catch (err) {
+    return { error: `unable to read ${path.basename(p)}: ${err.message}` };
   }
+
+  // Normalize CRLF / LF matching between file and prompt input
+  const fileHasCRLF = text.includes('\r\n');
+  if (fileHasCRLF && !find.includes('\r\n')) {
+    find = find.replace(/\r?\n/g, '\r\n');
+    replace = replace.replace(/\r?\n/g, '\r\n');
+  } else if (!fileHasCRLF && find.includes('\r\n')) {
+    find = find.replace(/\r\n/g, '\n');
+    replace = replace.replace(/\r\n/g, '\n');
+  }
+
+  // fix already applied? (e.g. find is a prefix of replace) — don't apply it twice
+  if (replace.includes(find) && text.includes(replace)) {
+    return { error: `${path.basename(p)} already has that fix 👍` };
+  }
+
+  let target = find;
+  let count = text.split(find).length - 1;
+
+  if (count === 0) {
+    // the screen may show different whitespace: fall back to a unique trimmed-line match
+    const want = find.trim();
+    const lines = text.split(/\r?\n/);
+    const hits = lines.filter((l) => l.trim() === want);
+    if (hits.length === 1) {
+      target = hits[0];
+      count = 1;
+      const leadingIndent = target.match(/^\s*/)[0];
+      replace = leadingIndent + replace.trim();
+    }
+  }
+
   if (count === 0) return { error: `couldn't find that exact line in ${path.basename(p)}` };
   if (count > 1) return { error: `that text appears ${count}× in ${path.basename(p)}, so i won't guess` };
+
   const after = text.replace(target, () => replace);
-  fs.writeFileSync(p, after);
+  try {
+    fs.writeFileSync(p, after, 'utf8');
+  } catch (err) {
+    return { error: `failed to save ${path.basename(p)}: ${err.message}` };
+  }
+
   lastEdit = { path: p, before: text, after };
   return { ok: true, file: path.basename(p) };
 }
@@ -83,10 +169,17 @@ async function applyFix(win, { file, find, replace }) {
 function undoFix() {
   if (!lastEdit) return { error: 'nothing to undo' };
   const { path: p, before, after } = lastEdit;
-  if (fs.readFileSync(p, 'utf8') !== after) return { error: 'the file changed since, so i won\'t overwrite your edits' };
-  fs.writeFileSync(p, before);
-  lastEdit = null;
-  return { ok: true, file: path.basename(p) };
+  try {
+    if (!fs.existsSync(p)) return { error: 'the file was deleted, cannot undo' };
+    if (fs.readFileSync(p, 'utf8') !== after) {
+      return { error: "the file changed since, so i won't overwrite your edits" };
+    }
+    fs.writeFileSync(p, before, 'utf8');
+    lastEdit = null;
+    return { ok: true, file: path.basename(p) };
+  } catch (err) {
+    return { error: `undo failed: ${err.message}` };
+  }
 }
 
 module.exports = { applyFix, undoFix };

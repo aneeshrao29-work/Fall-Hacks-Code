@@ -28,3 +28,6 @@ Thumbs.db
 .claude-flow/
 .swarm/
 ruvector.db
+**/.claude-flow/
+**/.swarm/
+**/ruvector.db

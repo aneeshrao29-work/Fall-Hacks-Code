@@ -1,6 +1,18 @@
 const $ = (s) => document.querySelector(s);
 // stub so the page still renders in a normal browser for design work
-const api = window.jepiAPI || { look: async () => ({ error: 'open me with npm start, twin' }), clickThrough() {}, quit() {}, onHotkey() {}, onCursor() {}, copy() {}, platform: 'darwin' };
+const api = window.jepiAPI || {
+  look: async () => ({ error: 'open me with npm start, twin' }),
+  clickThrough() {},
+  quit() {},
+  copy() {},
+  unpin() {},
+  applyFix: async () => ({ error: 'not running in electron' }),
+  undoFix: async () => ({ error: 'not running in electron' }),
+  onHotkey() {},
+  onCursor() {},
+  onTrack() {},
+  platform: 'darwin',
+};
 // shortcut labels per OS: ⌘ on macOS, Ctrl on Windows/Linux
 const MAC = api.platform === 'darwin';
 const keys = (t) => (MAC ? t : t.replace(/⌘⇧/g, 'Ctrl+Shift+').replace(/⌘⌥/g, 'Ctrl+Alt+').replace(/⌘/g, 'Ctrl+'));
@@ -47,12 +59,12 @@ function say(text, cls = '', ttl = 9000, actions = [], diff = null) {
     b.onclick = (e) => { e.stopPropagation(); fn(); };
     return b;
   }));
-  if (diff) { // red/green before→after preview of a code change
+  if (diff && (diff.old || diff.new)) { // red/green before→after preview of a code change
     const pre = document.createElement('pre');
     pre.className = 'diff';
     const del = document.createElement('div'), add = document.createElement('div');
-    del.className = 'del'; del.textContent = '− ' + diff.old;
-    add.className = 'add'; add.textContent = '+ ' + diff.new;
+    del.className = 'del'; del.textContent = '− ' + (diff.old || '');
+    add.className = 'add'; add.textContent = '+ ' + (diff.new || '');
     pre.append(del, add);
     acts.prepend(pre);
   }
@@ -125,7 +137,8 @@ function trail(x, y) {
     p.style.setProperty('--dx', Math.random() * 20 - 10 + 'px');
   } else if (t === 'six7') { p.classList.add('txt'); p.textContent = pick(['6', '7']); p.style.color = pick(['#f7c948', '#f0717f', '#6fe0c8']); }
   else if (t === 'rainbow') { Object.assign(p.style, { width: '12px', height: '12px', background: `hsl(${(rainbowHue += 30) % 360} 90% 60%)` }); }
-  else p.append(miniSprite(TRAIL_ART[t]));
+  else if (TRAIL_ART[t]) p.append(miniSprite(TRAIL_ART[t]));
+  else p.append(miniSprite(TRAIL_ART.sparkles));
   Object.assign(p.style, { left: x + Math.random() * 16 - 8 + 'px', top: y + Math.random() * 16 - 8 + 'px' });
   $('#fx').append(p);
   setTimeout(() => p.remove(), 1000);
@@ -187,7 +200,10 @@ async function summon() {
 
 // ---------- pinpoints ----------
 function clearMarks(stopTracking = true) { // fade pins + glove out instead of popping them away
-  clearInterval(pointerTimer);
+  if (pointerTimer) {
+    clearInterval(pointerTimer);
+    pointerTimer = null;
+  }
   trackOff = { x: 0, y: 0 };
   if (stopTracking) api.unpin?.(); // NOT when we're just replacing pins (main already tracks the new ones)
   const old = [...$('#marks').children];
@@ -221,17 +237,25 @@ function goHome() {
   parked = false;
   flyTo(home.x, home.y);
 }
-function showTargets({ targets, display: d, win: w }) {
+function showTargets({ targets = [], display, win: w }) {
   clearMarks(false);
   $('#marks').style.transform = pointer.style.transform = '';
-  return targets.map((tg, i) => {
-    let [y0, x0, y1, x1] = tg.box_2d.map((v) => clamp(v, 0, 1000) / 1000);
+  const d = display || { x: 0, y: 0, width: innerWidth, height: innerHeight };
+  const winPos = w || { x: 0, y: 0 };
+  const rects = [];
+
+  for (let i = 0; i < targets.length; i++) {
+    const tg = targets[i];
+    if (!tg || !Array.isArray(tg.box_2d) || tg.box_2d.length < 4) continue;
+    let [y0, x0, y1, x1] = tg.box_2d.map((v) => clamp(Number(v) || 0, 0, 1000) / 1000);
     if (y1 < y0) [y0, y1] = [y1, y0];
     if (x1 < x0) [x0, x1] = [x1, x0];
     const pad = 6;
-    const left = Math.max(4, d.x + x0 * d.width - w.x - pad), top = Math.max(4, d.y + y0 * d.height - w.y - pad);
+    const left = Math.max(4, d.x + x0 * d.width - winPos.x - pad);
+    const top = Math.max(4, d.y + y0 * d.height - winPos.y - pad);
     const width = Math.min(innerWidth - left - 4, Math.max(24, (x1 - x0) * d.width + pad * 2));
     const height = Math.min(innerHeight - top - 4, Math.max(24, (y1 - y0) * d.height + pad * 2));
+
     const m = document.createElement('div');
     m.className = 'mark' + (top < 50 ? ' below' : '');
     Object.assign(m.style, { left: left + 'px', top: top + 'px', width: width + 'px', height: height + 'px', animationDelay: i * 0.15 + 's' });
@@ -239,10 +263,16 @@ function showTargets({ targets, display: d, win: w }) {
     tag.className = 'tag';
     tag.textContent = tg.label || 'here 👀';
     m.append(tag);
-    if (targets.length > 1) { const n = document.createElement('span'); n.className = 'num'; n.textContent = i + 1; m.append(n); }
+    if (targets.length > 1) {
+      const n = document.createElement('span');
+      n.className = 'num';
+      n.textContent = i + 1;
+      m.append(n);
+    }
     $('#marks').append(m);
-    return { left, top, width, height };
-  });
+    rects.push({ left, top, width, height });
+  }
+  return rects;
 }
 async function parkBy(r) {
   let x, side;
@@ -284,15 +314,27 @@ async function look(question = '', m = mode === 'watch' ? 'help' : mode, context
 async function present(res, question = '') {
   addAura(res.aura);
   if (res.screenChanged) res.reply += '\n(you switched screens while i was thinking, so no pins 👀)';
+  if (pointerTimer) {
+    clearInterval(pointerTimer);
+    pointerTimer = null;
+  }
   if (res.targets?.length) {
     say('on my way 💨');
     sfx('whoosh');
     const rects = showTargets(res);
-    await parkBy(rects[0]);
-    showPointer(rects[0]);
-    let i = 0; // glove tours every problem, one after another
-    if (rects.length > 1) pointerTimer = setInterval(() => showPointer(rects[++i % rects.length]), 3000);
-  } else goHome();
+    if (rects.length) {
+      await parkBy(rects[0]);
+      showPointer(rects[0]);
+      let i = 0; // glove tours every problem, one after another
+      if (rects.length > 1) {
+        pointerTimer = setInterval(() => showPointer(rects[++i % rects.length]), 3000);
+      }
+    } else {
+      goHome();
+    }
+  } else {
+    goHome();
+  }
   sfx('ding');
   setMood(res.mood, 8000);
   lastReply = res.reply;
@@ -302,6 +344,7 @@ async function present(res, question = '') {
   actions.push(['🧒 eli5', () => look('explain that like I\'m 5, in one short sentence', 'help', lastReply)]);
   actions.push(['↩ ask more', () => { followUp = true; openWish(); }]);
   say(res.reply + (res.tip ? `\n⚡ ${res.tip}` : ''), '', 15000, actions);
+  clearTimeout(dismissTimer);
   dismissTimer = setTimeout(goHome, mode === 'watch' ? 12000 : 15000);
 }
 function setWatch(on) {
@@ -364,10 +407,18 @@ function placeMenu() {
   const left = pos.x - r.width - 12 > 8 ? pos.x - r.width - 12 : pos.x + W + 12;
   Object.assign(dock.style, { left: clamp(left, 8, innerWidth - r.width - 8) + 'px', top: clamp(pos.y + H - r.height, 8, innerHeight - r.height - 8) + 'px' });
 }
-function openMenu() { closeWish(); caption.textContent = ''; dock.classList.add('open'); placeMenu(); }
+function openMenu() {
+  clearTimeout(dismissTimer);
+  closeWish();
+  caption.textContent = '';
+  dock.classList.add('open');
+  placeMenu();
+  api.clickThrough(false);
+}
 function closeMenu() { dock.classList.remove('open'); if (!hovering) api.clickThrough(true); }
 function toggleMenu() { dock.classList.contains('open') ? closeMenu() : openMenu(); }
 function openWish() {
+  clearTimeout(dismissTimer);
   tipsOff = true;
   closeMenu();
   wish.classList.add('open');
@@ -404,10 +455,19 @@ $('#askForm').onsubmit = (e) => {
 };
 
 // ---------- poke + drag ----------
-function poke() { tipsOff = true; wake(); setMood('shook', 1200); sfx('pop'); say(pick(PERSONAS[persona].pokes)); addAura(-1); }
+function poke() {
+  clearTimeout(dismissTimer);
+  tipsOff = true;
+  wake();
+  setMood('shook', 1200);
+  sfx('pop');
+  say(pick(PERSONAS[persona].pokes));
+  addAura(-1);
+}
 jepi.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleMenu(); } };
 jepi.ondblclick = () => { clearTimeout(clickTimer); closeMenu(); poke(); };
 jepi.onpointerdown = (e) => {
+  clearTimeout(dismissTimer);
   const start = { ...pos }, sx = e.clientX, sy = e.clientY;
   let dragged = false, lastP = 0;
   jepi.setPointerCapture(e.pointerId);
