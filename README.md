@@ -3,8 +3,6 @@ Group Name: JepiTheGenie
 
 Group Members: Aneesh Rao, Tejas Dutt, Allen Ng, Christy Zhou
 
-What is our application about?
-
 Inspiration
 -----------
 We were inspired by existing AI code assistants, but we wanted to add our own spin. Oftentimes, AI assistants feel stiff and unspecific in their help; we wanted to address the problem.
