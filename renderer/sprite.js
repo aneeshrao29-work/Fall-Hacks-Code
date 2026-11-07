@@ -107,6 +107,7 @@ const POINTER_ART = ['....kk......', '...kwwk.....', '...kwwk.....', '...kwwk...
 
 function miniSprite(rows, scale = 3) {
   const svg = document.createElementNS(SVGNS, 'svg');
+  if (!Array.isArray(rows) || !rows.length || !rows[0]) return svg;
   svg.setAttribute('viewBox', `0 0 ${rows[0].length} ${rows.length}`);
   svg.setAttribute('width', rows[0].length * scale);
   svg.setAttribute('height', rows.length * scale);
